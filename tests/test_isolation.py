@@ -20,9 +20,20 @@ def test_templates_pulls_no_embedding_deps():
 
 
 def test_templates_does_not_import_sibling_extensions():
-    # No extension may import another extension subpackage.
-    import obsidian_vault_mcp_ext.templates.tools as tools  # noqa: F401
-    import obsidian_vault_mcp_ext.templates.extension as ext  # noqa: F401
-    leaked = [m for m in sys.modules if m.startswith("obsidian_vault_mcp_ext.") and
-              any(m.startswith(f"obsidian_vault_mcp_ext.{sib}") for sib in ("semantic", "recurring", "audit"))]
-    assert leaked == [], f"templates leaked sibling extension imports: {leaked}"
+    # No extension may import another extension subpackage. Checked in a fresh
+    # interpreter so the result is independent of what other tests already
+    # imported into this process's sys.modules.
+    import subprocess
+    import sys as _sys
+
+    code = (
+        "import sys\n"
+        "import obsidian_vault_mcp_ext.templates.tools\n"
+        "import obsidian_vault_mcp_ext.templates.extension\n"
+        "sibs = ('semantic', 'recurring', 'audit')\n"
+        "leaked = [m for m in sys.modules if m.startswith('obsidian_vault_mcp_ext.') and\n"
+        "          any(m.startswith('obsidian_vault_mcp_ext.' + s) for s in sibs)]\n"
+        "assert leaked == [], 'templates leaked sibling extension imports: ' + repr(leaked)\n"
+    )
+    result = subprocess.run([_sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
