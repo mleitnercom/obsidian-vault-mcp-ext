@@ -15,6 +15,52 @@ from obsidian_vault_mcp_ext import TemplatesExtension
 serve([TemplatesExtension()])
 ```
 
+## Installation
+
+The host server ([`jimprosser/obsidian-web-mcp`](https://github.com/jimprosser/obsidian-web-mcp))
+provides the `serve(extensions=...)` seam this package plugs into. Neither package is on PyPI
+yet, so install both from git — **the host first** (its dependency must already be present when
+pip resolves this package):
+
+```bash
+# 1. Host server (must include the extension seam, i.e. recent main):
+pip install "obsidian-web-mcp @ git+https://github.com/jimprosser/obsidian-web-mcp@main"
+
+# 2. This package — base (Templates + Recurring, no heavy deps):
+pip install "obsidian-vault-mcp-ext @ git+https://github.com/mleitnercom/obsidian-vault-mcp-ext@main"
+
+# ...or with semantic search (also pulls faiss-cpu / fastembed / numpy<2 / rank-bm25):
+pip install "obsidian-vault-mcp-ext[semantic] @ git+https://github.com/mleitnercom/obsidian-vault-mcp-ext@main"
+```
+
+Python 3.12+. The `[semantic]` extra needs a Python with faiss/numpy<2 wheels (3.12 or 3.13).
+Verified on Python 3.12 (host `0.2.0`).
+
+## Running
+
+First configure the **host** per its README (at least `VAULT_PATH` and `VAULT_MCP_TOKEN`, plus
+its OAuth settings for remote use), then set the extension knobs you need
+(see [Configuration](#configuration)). Then start the server with the extensions loaded.
+
+Bundled entry point — serves all three (semantic fails soft without its extra):
+
+```bash
+vault-mcp-ext
+```
+
+To load only a subset, use your own one-line entry point:
+
+```python
+# run_vault.py
+from obsidian_vault_mcp.server import serve
+from obsidian_vault_mcp_ext import TemplatesExtension, RecurringExtension
+
+serve([TemplatesExtension(), RecurringExtension()])   # e.g. without semantic
+```
+```bash
+python run_vault.py
+```
+
 ## Extensions
 
 All three are shipped and tested (the semantic full reindex + search round trip is
