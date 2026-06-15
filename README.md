@@ -23,8 +23,16 @@ serve([TemplatesExtension()])
   work from vault files regardless. Env: `VAULT_TEMPLATER_FOLDER`, `VAULT_OBSIDIAN_REST_URL`,
   `VAULT_OBSIDIAN_REST_API_KEY`, `VAULT_DATAVIEW_TIMEOUT`.
 
-Planned: `RecurringExtension` (task materialization), `SemanticExtension` (`[semantic]`
-extra: faiss/fastembed, lazy-imported), `AuditExtension` (once the write-listener seam lands).
+- **SemanticExtension** — embedding + BM25 search (`vault_semantic_search`, `vault_reindex`)
+  with a persistent FAISS cache. Heavy deps (`faiss-cpu`, `fastembed`, `numpy`, `rank-bm25`)
+  are an optional extra and lazy-imported, so the package loads without them and the search
+  tools fail soft until `pip install obsidian-vault-mcp-ext[semantic]`. Reindexes
+  incrementally via the host's index change listener.
+- **RecurringExtension** — materializes `recurring-template` notes into concrete task
+  instances (`recurring_materialize`); strictly idempotent via an on-disk scan of the
+  instance folder. No extra dependencies.
+
+Planned: `AuditExtension` (once a write-listener seam lands upstream, jimprosser#58).
 
 ## Development
 
