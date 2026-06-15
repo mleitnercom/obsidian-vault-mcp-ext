@@ -1,0 +1,34 @@
+[project]
+name = "obsidian-vault-mcp-ext"
+version = "0.1.0"
+description = "Personal/optional extensions for jimprosser/obsidian-web-mcp, loaded via its serve(extensions=...) seam (#57). Heavy/optional-dependency and personal features that intentionally stay out of upstream core."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # The host MCP server providing the Extension seam (serve/extensions, #57).
+    # Installed editable from a local checkout during development.
+    "obsidian-web-mcp>=0.1.0",
+]
+
+[project.optional-dependencies]
+# Heavy embedding deps live here, not in the host. SemanticExtension lazy-imports
+# them so the package is usable without the extra installed.
+semantic = [
+    "faiss-cpu>=1.8.0",
+    "numpy>=1.26.0,<2.0.0",
+    "fastembed>=0.6.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+vault-mcp-ext = "obsidian_vault_mcp_ext.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/obsidian_vault_mcp_ext"]
