@@ -7,15 +7,17 @@ Compose only the extensions (and install only the extras) you want:
 
 from obsidian_vault_mcp.server import serve
 
+from .imports import ImportExtension
 from .recurring import RecurringExtension
 from .semantic import SemanticExtension
 from .templates import TemplatesExtension
 
 
 def main() -> None:
-    # Default entry point loads all three; semantic fails soft without its [semantic] extra.
+    # Default entry point loads all four; semantic fails soft without its [semantic] extra,
+    # and import stays inert until VAULT_IMPORT_URL_ENABLED / VAULT_IMPORT_FILE_ALLOWED_ROOTS.
     # For a subset, write your own entry point and pass only the extensions you want.
-    serve([TemplatesExtension(), SemanticExtension(), RecurringExtension()])
+    serve([TemplatesExtension(), SemanticExtension(), RecurringExtension(), ImportExtension()])
 
 
 if __name__ == "__main__":

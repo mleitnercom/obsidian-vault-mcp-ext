@@ -26,7 +26,7 @@ pip resolves this package):
 # 1. Host server (must include the extension seam, i.e. recent main):
 pip install "obsidian-web-mcp @ git+https://github.com/jimprosser/obsidian-web-mcp@main"
 
-# 2. This package — base (Templates + Recurring, no heavy deps):
+# 2. This package — base (Templates + Recurring + Import, no heavy deps):
 pip install "obsidian-vault-mcp-ext @ git+https://github.com/mleitnercom/obsidian-vault-mcp-ext@main"
 
 # ...or with semantic search (also pulls faiss-cpu / fastembed / numpy<2 / rank-bm25):
@@ -63,7 +63,7 @@ python run_vault.py
 
 ## Extensions
 
-All three are shipped and tested (the semantic full reindex + search round trip is
+All four are shipped and tested (the semantic full reindex + search round trip is
 verified on Python 3.12 with the `[semantic]` extra installed).
 
 - **TemplatesExtension** — `{{token}}` rendering (not full Templater; `<% %>` is rejected)
@@ -85,6 +85,14 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   instance folder. The deepest of the three (the Task-OS engine: calendar anchors, relative
   intervals, bootstrap and catch-up semantics). No extra dependencies. See
   [docs/recurring.md](docs/recurring.md).
+
+- **ImportExtension** — bring binary files into the vault by URL (`vault_import_url`) or from a
+  local allowlisted path (`vault_import_file`). URL import is **SSRF-hardened**: it resolves the
+  host once and pins the connection to the validated IP (no DNS-rebinding window), re-validates
+  every redirect hop, denies non-public targets by default, restricts ports, and caps size.
+  Secure-by-default: URL import is off until `VAULT_IMPORT_URL_ENABLED`, file import off until
+  `VAULT_IMPORT_FILE_ALLOWED_ROOTS`. No extra dependencies (stdlib only). See
+  [docs/import.md](docs/import.md).
 
 Planned: `AuditExtension` (once a write-listener seam lands upstream, jimprosser#58).
 
@@ -128,6 +136,19 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_RECURRING_DONE_STATUS` | `done` | `status` value marking an instance completed (relative mode). |
 | `VAULT_RECURRING_CATCHUP_MODE` | `next` | `next` (most recent pending period) or `all` (one per missed period). |
 | `VAULT_RECURRING_INTERVAL` | `0` | Parsed but unused in this port (no internal scheduler; drive via the CLI). |
+
+### Import
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_IMPORT_URL_ENABLED` | `false` | Master switch for `vault_import_url`; fails soft until set. |
+| `VAULT_IMPORT_URL_ALLOW_PRIVATE` | `false` | Allow non-public (private/loopback/link-local) URL targets. Opt-in only. |
+| `VAULT_IMPORT_URL_TIMEOUT` | `30` | Per-connection timeout (s). |
+| `VAULT_IMPORT_URL_MAX_REDIRECTS` | `5` | Max redirect hops; each hop is re-validated and re-pinned. |
+| `VAULT_IMPORT_URL_ALLOWED_PORTS` | `80,443` | Comma-separated allowed ports for URL targets. |
+| `VAULT_IMPORT_MAX_BYTES` | `10485760` | Hard size cap (bytes) for URL and file import. |
+| `VAULT_IMPORT_ALLOWED_MEDIA_TYPES_JSON` | _(images + PDF)_ | JSON `{media_type: [".ext"]}` overriding the default allowlist. |
+| `VAULT_IMPORT_FILE_ALLOWED_ROOTS` | _(empty)_ | OS-pathsep list of roots `vault_import_file` may read from. Empty disables it. |
 
 ## Development
 

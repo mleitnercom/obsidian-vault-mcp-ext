@@ -11,7 +11,7 @@ The classes are exposed lazily so that importing or using one extension never im
 sibling (and never pulls a sibling's optional dependencies).
 """
 
-__all__ = ["TemplatesExtension", "SemanticExtension", "RecurringExtension"]
+__all__ = ["TemplatesExtension", "SemanticExtension", "RecurringExtension", "ImportExtension"]
 
 
 def __getattr__(name: str):
@@ -24,4 +24,7 @@ def __getattr__(name: str):
     if name == "RecurringExtension":
         from .recurring import RecurringExtension
         return RecurringExtension
+    if name == "ImportExtension":
+        from .imports import ImportExtension
+        return ImportExtension
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
