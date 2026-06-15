@@ -17,22 +17,71 @@ serve([TemplatesExtension()])
 
 ## Extensions
 
-- **TemplatesExtension** — Templater-style `{{token}}` rendering (not full Templater) and
-  Dataview `TABLE` DQL via the Obsidian Local REST API. Fail-soft: the Dataview tool
-  returns a capability error when `VAULT_OBSIDIAN_REST_URL` is unset; the template tools
-  work from vault files regardless. Env: `VAULT_TEMPLATER_FOLDER`, `VAULT_OBSIDIAN_REST_URL`,
-  `VAULT_OBSIDIAN_REST_API_KEY`, `VAULT_DATAVIEW_TIMEOUT`.
+All three are shipped and tested (the semantic full reindex + search round trip is
+verified on Python 3.12 with the `[semantic]` extra installed).
 
-- **SemanticExtension** — embedding + BM25 search (`vault_semantic_search`, `vault_reindex`)
-  with a persistent FAISS cache. Heavy deps (`faiss-cpu`, `fastembed`, `numpy`, `rank-bm25`)
-  are an optional extra and lazy-imported, so the package loads without them and the search
-  tools fail soft until `pip install obsidian-vault-mcp-ext[semantic]`. Reindexes
-  incrementally via the host's index change listener.
+- **TemplatesExtension** — `{{token}}` rendering (not full Templater; `<% %>` is rejected)
+  and Dataview `TABLE` DQL via the Obsidian Local REST API. Tools: `vault_template_list`,
+  `vault_template_render`, `vault_template_apply`, `vault_dataview_query`. Fail-soft: the
+  Dataview tool returns a capability error when `VAULT_OBSIDIAN_REST_URL` is unset; the
+  template tools work from vault files regardless. No optional extra. See
+  [docs/templates.md](docs/templates.md).
+
+- **SemanticExtension** — hybrid embedding + BM25 search (`vault_semantic_search`,
+  `vault_reindex`) with a persistent FAISS cache. Heavy deps (`faiss-cpu`, `fastembed`,
+  `numpy`, `rank-bm25`) are an optional extra and lazy-imported, so the package loads
+  without them and the search tools fail soft until
+  `pip install obsidian-vault-mcp-ext[semantic]`. Reindexes incrementally via the host's
+  index change listener. See [docs/semantic.md](docs/semantic.md).
+
 - **RecurringExtension** — materializes `recurring-template` notes into concrete task
   instances (`recurring_materialize`); strictly idempotent via an on-disk scan of the
-  instance folder. No extra dependencies.
+  instance folder. The deepest of the three (the Task-OS engine: calendar anchors, relative
+  intervals, bootstrap and catch-up semantics). No extra dependencies. See
+  [docs/recurring.md](docs/recurring.md).
 
 Planned: `AuditExtension` (once a write-listener seam lands upstream, jimprosser#58).
+
+## Configuration
+
+Every knob is an environment variable, namespaced per extension and read at import time.
+Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
+
+### Templates
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_TEMPLATER_FOLDER` | _(empty)_ | Vault-relative folder holding templates. |
+| `VAULT_DATAVIEW_TIMEOUT` | `15` | Default timeout (s) for `vault_dataview_query`. |
+| `VAULT_OBSIDIAN_REST_URL` | _(empty)_ | Obsidian Local REST API base URL; Dataview fails soft when unset. |
+| `VAULT_OBSIDIAN_REST_API_KEY` | _(empty)_ | Bearer token for the REST API. |
+| `VAULT_OBSIDIAN_REST_VERIFY_TLS` | `false` | Verify TLS certs (default suits self-signed local HTTPS). |
+| `VAULT_OBSIDIAN_REST_TIMEOUT` | `15` | Default timeout (s) for REST requests. |
+
+### Semantic
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_SEMANTIC_SEARCH_ENABLED` | `false` | Master switch; tools fail soft until set. |
+| `VAULT_SEMANTIC_EMBED_BACKEND` | `fastembed` | `auto` \| `fastembed` \| `sentence` (`fastembed` is the supported path). |
+| `VAULT_SEMANTIC_EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | Embedding model name. |
+| `VAULT_SEMANTIC_BUILD_ON_DEMAND` | `false` | Build a full index on first use when no cache exists. |
+| `VAULT_SEMANTIC_CHUNK_SIZE` | `900` | Target characters per chunk. |
+| `VAULT_SEMANTIC_CHUNK_OVERLAP` | `150` | Character overlap between chunks. |
+| `VAULT_SEMANTIC_EMBED_BATCH_SIZE` | `64` | Chunks embedded per batch. |
+| `VAULT_SEMANTIC_MAX_RESULTS` | `20` | Hard cap on results (clamps a call's `max_results`). |
+| `VAULT_SEMANTIC_UPDATE_DEBOUNCE_SECONDS` | `4` | Debounce for change-listener incremental updates. |
+| `VAULT_SEMANTIC_CACHE_PATH` | `<VAULT_PATH>/.obsidian-vault-mcp` | Explicit cache directory override. |
+
+### Recurring
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_RECURRING_ENABLED` | `true` | Master switch; tool returns `recurring_disabled` when false. |
+| `VAULT_RECURRING_TEMPLATES_FOLDER` | _(empty)_ | Vault-relative folder of template notes. Required. |
+| `VAULT_RECURRING_DONE_STATUS` | `done` | `status` value marking an instance completed (relative mode). |
+| `VAULT_RECURRING_CATCHUP_MODE` | `next` | `next` (most recent pending period) or `all` (one per missed period). |
+| `VAULT_RECURRING_INTERVAL` | `0` | Parsed but unused in this port (no internal scheduler; drive via the CLI). |
 
 ## Development
 
