@@ -3,9 +3,9 @@
 Mirrors the templates test's fixtures: a temp vault with the host's
 ``obsidian_vault_mcp.config.VAULT_PATH`` monkeypatched to it.
 
-The heavy embedding deps (faiss/numpy/fastembed/rank_bm25) are optional. Tests
-(a)-(c) prove the extension imports and registers and fails soft WITHOUT them.
-The real reindex+search test (d) is skipped unless they are installed.
+The heavy embedding deps (faiss/numpy/fastembed/rank_bm25) are an optional extra. The
+suite is correct in BOTH environments: the lazy-import / fail-soft tests run only when the
+extra is ABSENT, and the real reindex+search test runs only when it is PRESENT.
 """
 
 import importlib
@@ -18,6 +18,20 @@ from mcp.server.fastmcp import FastMCP
 from obsidian_vault_mcp import config as host_config
 from obsidian_vault_mcp_ext.semantic import SemanticExtension
 from obsidian_vault_mcp_ext.semantic import _config, tools as semantic_tools
+
+
+def _deps_available() -> bool:
+    for mod in ("faiss", "fastembed", "rank_bm25", "numpy"):
+        try:
+            importlib.import_module(mod)
+        except Exception:
+            return False
+    return True
+
+
+_HAVE_DEPS = _deps_available()
+_only_without_deps = pytest.mark.skipif(_HAVE_DEPS, reason="only meaningful without the semantic extra installed")
+_only_with_deps = pytest.mark.skipif(not _HAVE_DEPS, reason="semantic extra (faiss/fastembed/rank_bm25/numpy) not installed")
 
 
 @pytest.fixture
@@ -40,15 +54,7 @@ def vault(tmp_path, monkeypatch):
     return v
 
 
-# (a) Imports WITHOUT faiss installed (proves lazy import).
-def test_semantic_imports_without_faiss():
-    mod = importlib.import_module("obsidian_vault_mcp_ext.semantic")
-    assert mod.SemanticExtension is not None
-    for heavy in ("faiss", "fastembed", "sentence_transformers", "numpy"):
-        assert heavy not in sys.modules, f"semantic import pulled in {heavy}"
-
-
-# (b) register_tools registers the tools on a FastMCP instance.
+# register_tools always works (no heavy deps needed to register).
 def test_register_tools_registers_search_and_reindex(vault):
     mcp = FastMCP("test")
     SemanticExtension().register_tools(mcp)
@@ -56,41 +62,42 @@ def test_register_tools_registers_search_and_reindex(vault):
         assert mcp._tool_manager.get_tool(name) is not None
 
 
-# (c) The search tool fails soft (clean error/empty) when deps/index are absent.
+# With no engine wired at all, the tool reports unavailable (deps-independent).
+def test_search_without_engine_reports_unavailable():
+    semantic_tools.set_engine(None)
+    res = json.loads(semantic_tools.vault_semantic_search("q"))
+    assert res["error"] == "Semantic search engine is unavailable"
+
+
+# --- Only meaningful WITHOUT the semantic extra ---
+
+@_only_without_deps
+def test_semantic_imports_without_faiss():
+    mod = importlib.import_module("obsidian_vault_mcp_ext.semantic")
+    assert mod.SemanticExtension is not None
+    for heavy in ("faiss", "fastembed", "sentence_transformers", "numpy"):
+        assert heavy not in sys.modules, f"semantic import pulled in {heavy}"
+
+
+@_only_without_deps
 def test_search_fails_soft_without_deps(vault):
-    SemanticExtension().register_tools(mcp := FastMCP("test"))  # noqa: F841 -- wires engine into tools
+    SemanticExtension().register_tools(FastMCP("test"))  # wires engine into tools
     res = json.loads(semantic_tools.vault_semantic_search("anything"))
-    # Either a clean capability error or an empty result set -- never a crash.
-    assert "error" in res or res.get("results") == []
+    assert "error" in res or res.get("results") == []  # clean error/empty, never a crash
 
 
+@_only_without_deps
 def test_reindex_fails_soft_without_deps(vault):
     SemanticExtension().register_tools(FastMCP("test"))
     res = json.loads(semantic_tools.vault_reindex(full=True))
     assert "error" in res
 
 
-def test_search_without_engine_reports_unavailable():
-    # No extension/engine wired at all.
-    semantic_tools.set_engine(None)
-    res = json.loads(semantic_tools.vault_semantic_search("q"))
-    assert res["error"] == "Semantic search engine is unavailable"
+# --- Only when the semantic extra IS installed: real reindex + search ---
 
-
-# (d) Full reindex + search over a tiny vault, only when the heavy deps are present.
-def _deps_available() -> bool:
-    for mod in ("faiss", "fastembed", "rank_bm25", "numpy"):
-        try:
-            importlib.import_module(mod)
-        except Exception:
-            return False
-    return True
-
-
-@pytest.mark.skipif(not _deps_available(), reason="semantic extra (faiss/fastembed/rank_bm25/numpy) not installed")
+@_only_with_deps
 def test_full_reindex_and_search(vault):
-    ext = SemanticExtension()
-    ext.register_tools(FastMCP("test"))
+    SemanticExtension().register_tools(FastMCP("test"))
     reindex = json.loads(semantic_tools.vault_reindex(full=True))
     assert "error" not in reindex, reindex
     assert reindex["indexed_files"] == 2
