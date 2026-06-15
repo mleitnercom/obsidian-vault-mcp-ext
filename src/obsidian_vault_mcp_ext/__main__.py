@@ -7,7 +7,7 @@ Compose only the extensions (and install only the extras) you want:
 
 from obsidian_vault_mcp.server import serve
 
-from .templates_extension import TemplatesExtension
+from .templates import TemplatesExtension
 
 
 def main() -> None:

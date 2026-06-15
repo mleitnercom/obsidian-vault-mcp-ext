@@ -6,7 +6,8 @@ import pytest
 from mcp.server.fastmcp import FastMCP
 
 from obsidian_vault_mcp import config as host_config
-from obsidian_vault_mcp_ext import TemplatesExtension, _config, templates
+from obsidian_vault_mcp_ext import TemplatesExtension
+from obsidian_vault_mcp_ext.templates import _config, tools as templates
 
 
 @pytest.fixture

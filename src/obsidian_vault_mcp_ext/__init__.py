@@ -8,6 +8,6 @@ what they want and installs only the dependencies that feature needs. Compose th
     serve([TemplatesExtension()])
 """
 
-from .templates_extension import TemplatesExtension
+from .templates import TemplatesExtension
 
 __all__ = ["TemplatesExtension"]

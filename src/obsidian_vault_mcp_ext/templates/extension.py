@@ -2,7 +2,7 @@
 
 from obsidian_vault_mcp.extensions import Extension
 
-from . import templates
+from . import tools
 
 _RO = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 _WRITE = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False}
@@ -21,7 +21,7 @@ class TemplatesExtension(Extension):
             name="vault_template_list",
             description="List markdown templates under VAULT_TEMPLATER_FOLDER.",
             annotations=_RO,
-        )(templates.vault_template_list)
+        )(tools.vault_template_list)
         mcp.tool(
             name="vault_template_render",
             description=(
@@ -29,7 +29,7 @@ class TemplatesExtension(Extension):
                 "returns the rendered content without writing."
             ),
             annotations=_RO,
-        )(templates.vault_template_render)
+        )(tools.vault_template_render)
         mcp.tool(
             name="vault_template_apply",
             description=(
@@ -37,7 +37,7 @@ class TemplatesExtension(Extension):
                 "Set overwrite=true to replace an existing file."
             ),
             annotations=_WRITE,
-        )(templates.vault_template_apply)
+        )(tools.vault_template_apply)
         mcp.tool(
             name="vault_dataview_query",
             description=(
@@ -45,4 +45,4 @@ class TemplatesExtension(Extension):
                 "VAULT_OBSIDIAN_REST_URL; returns a capability error when unset (fail-soft)."
             ),
             annotations=_RO,
-        )(templates.vault_dataview_query)
+        )(tools.vault_dataview_query)
