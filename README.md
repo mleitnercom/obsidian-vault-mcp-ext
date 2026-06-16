@@ -26,7 +26,7 @@ pip resolves this package):
 # 1. Host server (must include the extension seam, i.e. recent main):
 pip install "obsidian-web-mcp @ git+https://github.com/jimprosser/obsidian-web-mcp@main"
 
-# 2. This package — base (Templates + Recurring + Import, no heavy deps):
+# 2. This package — base (Templates + Recurring + Import + Maintenance, no heavy deps):
 pip install "obsidian-vault-mcp-ext @ git+https://github.com/mleitnercom/obsidian-vault-mcp-ext@main"
 
 # ...or with semantic search (also pulls faiss-cpu / fastembed / numpy<2 / rank-bm25):
@@ -63,7 +63,7 @@ python run_vault.py
 
 ## Extensions
 
-All four are shipped and tested (the semantic full reindex + search round trip is
+All five are shipped and tested (the semantic full reindex + search round trip is
 verified on Python 3.12 with the `[semantic]` extra installed).
 
 - **TemplatesExtension** — `{{token}}` rendering (not full Templater; `<% %>` is rejected)
@@ -93,6 +93,12 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   Secure-by-default: URL import is off until `VAULT_IMPORT_URL_ENABLED`, file import off until
   `VAULT_IMPORT_FILE_ALLOWED_ROOTS`. No extra dependencies (stdlib only). See
   [docs/import.md](docs/import.md).
+
+- **MaintenanceExtension** — vault housekeeping: detect markdown files that are not valid
+  UTF-8 (`vault_scan_encoding`), repair them by re-decoding from a chosen source encoding and
+  rewriting atomically (`vault_repair_encoding`), and soft-delete directories into the vault's
+  trash folder (`vault_delete_directory`). Vault-confined, skips hidden dirs/symlinks, no extra
+  dependencies (stdlib only). See [docs/maintenance.md](docs/maintenance.md).
 
 Planned: `AuditExtension` (once a write-listener seam lands upstream, jimprosser#58).
 
@@ -149,6 +155,15 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_IMPORT_MAX_BYTES` | `10485760` | Hard size cap (bytes) for URL and file import. |
 | `VAULT_IMPORT_ALLOWED_MEDIA_TYPES_JSON` | _(images + PDF)_ | JSON `{media_type: [".ext"]}` overriding the default allowlist. |
 | `VAULT_IMPORT_FILE_ALLOWED_ROOTS` | _(empty)_ | OS-pathsep list of roots `vault_import_file` may read from. Empty disables it. |
+
+### Maintenance
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_MAINTENANCE_SCAN_MAX_RESULTS` | `100` | Default cap on issues returned by `vault_scan_encoding`. |
+| `VAULT_MAINTENANCE_REPAIR_MAX_FILES` | `50` | Default cap on files touched by one `vault_repair_encoding` call. |
+| `VAULT_MAINTENANCE_REPAIR_SOURCE_ENCODING` | `cp1252` | Default source encoding assumed when repairing. |
+| `VAULT_MAINTENANCE_TRASH_DIR` | `.trash` | Vault-root folder soft-deleted directories are moved into. |
 
 ## Development
 
