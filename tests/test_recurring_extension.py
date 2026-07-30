@@ -193,6 +193,8 @@ def test_instance_carries_title_status_updated_and_body(vault):
     assert fm["title"] == "VAT Return"
     assert fm["status"] == "next"
     assert fm["updated"] == "2026-08-01"
+    # body opens with the H1 title, per the Tasks-Schema v0.8 body convention
+    assert body.startswith("# VAT Return\n")
     assert "## Next Action" in body
     assert "Prepare and submit the VAT return." in body
     assert "## Verlauf" in body
