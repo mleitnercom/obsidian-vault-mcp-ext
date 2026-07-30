@@ -24,6 +24,7 @@ def vault(tmp_path, monkeypatch):
         "---\n"
         "type: recurring-template\n"
         "id: vat-return\n"
+        "title: VAT Return\n"
         "recurrence_anchor_mode: absolute\n"
         "recurrence_anchor: fixed-07-31\n"
         "created: 2026-01-01\n"
@@ -36,7 +37,8 @@ def vault(tmp_path, monkeypatch):
         "tags_to_inherit:\n"
         "  - vat\n"
         "---\n"
-        "Body of the template.\n",
+        "## Next Action (Template)\n"
+        "Prepare and submit the VAT return.\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(host_config, "VAULT_PATH", v)
@@ -121,6 +123,7 @@ def test_relative_mode_bootstrap_and_idempotency(vault, monkeypatch):
         "---\n"
         "type: recurring-template\n"
         "id: weekly-review\n"
+        "title: Weekly Review\n"
         "recurrence_anchor_mode: relative\n"
         "recurrence_interval: 7d\n"
         "target_folder: tasks\n"
@@ -152,3 +155,108 @@ def test_unset_folder_returns_capability_error(vault, monkeypatch):
     monkeypatch.setattr(_config, "VAULT_RECURRING_TEMPLATES_FOLDER", "")
     res = json.loads(recurring.recurring_materialize(as_of="2026-08-01"))
     assert res["error_code"] == "recurring_folder_unset"
+
+
+# --------------------------------------------------------------------------
+# Instances are schema-complete tasks (title / status / updated / body)
+# --------------------------------------------------------------------------
+
+
+def _instance(vault, rel):
+    import frontmatter
+
+    post = frontmatter.loads((vault / rel).read_text(encoding="utf-8"))
+    return post.metadata, post.content
+
+
+def _absolute_template(vault, name, template_id, extra_fm="", body="## Next Action (Template)\nDo it.\n"):
+    (vault / "templates" / name).write_text(
+        "---\n"
+        "type: recurring-template\n"
+        f"id: {template_id}\n"
+        "title: Some Recurring Thing\n"
+        "recurrence_anchor_mode: absolute\n"
+        "recurrence_anchor: fixed-07-31\n"
+        "created: 2026-01-01\n"
+        "target_folder: tasks\n"
+        + extra_fm
+        + "---\n"
+        + body,
+        encoding="utf-8",
+    )
+
+
+def test_instance_carries_title_status_updated_and_body(vault):
+    res = json.loads(recurring.recurring_materialize(as_of="2026-08-01"))
+    assert res["errors"] == [], res
+    fm, body = _instance(vault, res["created"][0]["path"])
+    assert fm["title"] == "VAT Return"
+    assert fm["status"] == "next"
+    assert fm["updated"] == "2026-08-01"
+    assert "## Next Action" in body
+    assert "Prepare and submit the VAT return." in body
+    assert "## Verlauf" in body
+    assert "## Bezug" in body
+    assert "[[vat]]" in body
+
+
+def test_frontmatter_to_inherit_overrides_status(vault):
+    _absolute_template(
+        vault, "wv.md", "wv-tpl", extra_fm="frontmatter_to_inherit:\n  status: wv\n"
+    )
+    res = json.loads(recurring.recurring_materialize(template_id="wv-tpl", as_of="2026-08-01"))
+    fm, _ = _instance(vault, res["created"][0]["path"])
+    assert fm["status"] == "wv"
+
+
+def test_body_action_overrides_next_action_section(vault):
+    _absolute_template(
+        vault,
+        "ba.md",
+        "ba-tpl",
+        extra_fm="body_action: Do exactly this.\n",
+        body="## Next Action (Template)\nShould NOT appear.\n",
+    )
+    res = json.loads(recurring.recurring_materialize(template_id="ba-tpl", as_of="2026-08-01"))
+    _, body = _instance(vault, res["created"][0]["path"])
+    assert "Do exactly this." in body
+    assert "Should NOT appear" not in body
+
+
+def test_missing_next_action_section_uses_placeholder_and_warns(vault):
+    _absolute_template(vault, "nosec.md", "nosec-tpl", body="Just prose, no heading.\n")
+    res = json.loads(recurring.recurring_materialize(template_id="nosec-tpl", as_of="2026-08-01"))
+    fm, body = _instance(vault, res["created"][0]["path"])
+    assert "## Next Action" in body
+    assert "Some Recurring Thing" in body  # placeholder = title
+    assert any("placeholder" in w.get("warning", "") for w in res["warnings"])
+
+
+def test_template_without_title_errors_and_writes_nothing(vault):
+    (vault / "templates" / "notitle.md").write_text(
+        "---\n"
+        "type: recurring-template\n"
+        "id: notitle-tpl\n"
+        "recurrence_anchor_mode: absolute\n"
+        "recurrence_anchor: fixed-07-31\n"
+        "created: 2026-01-01\n"
+        "target_folder: tasks\n"
+        "---\n"
+        "## Next Action (Template)\nX.\n",
+        encoding="utf-8",
+    )
+    res = json.loads(recurring.recurring_materialize(template_id="notitle-tpl", as_of="2026-08-01"))
+    assert res["created"] == [], res
+    assert any("title" in e.get("error", "") for e in res["errors"]), res
+    assert not (vault / "tasks" / "recurring-notitle-tpl-fixed-07-31-2026.md").exists()
+
+
+def test_dry_run_returns_planned_frontmatter(vault):
+    res = json.loads(recurring.recurring_materialize(dry_run=True, as_of="2026-08-01"))
+    entry = res["created"][0]
+    assert entry["dry_run"] is True
+    planned = entry["planned_frontmatter"]
+    assert planned["title"] == "VAT Return"
+    assert planned["status"] == "next"
+    assert planned["updated"] == "2026-08-01"
+    assert list((vault / "tasks").glob("*.md")) == []
