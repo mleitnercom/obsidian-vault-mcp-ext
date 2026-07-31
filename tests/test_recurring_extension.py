@@ -262,3 +262,76 @@ def test_dry_run_returns_planned_frontmatter(vault):
     assert planned["status"] == "next"
     assert planned["updated"] == "2026-08-01"
     assert list((vault / "tasks").glob("*.md")) == []
+
+
+# --------------------------------------------------------------------------
+# Run observability (alert task + run report)
+# --------------------------------------------------------------------------
+
+
+def _titleless_template(vault, name, template_id):
+    (vault / "templates" / name).write_text(
+        "---\n"
+        "type: recurring-template\n"
+        f"id: {template_id}\n"
+        "recurrence_anchor_mode: absolute\n"
+        "recurrence_anchor: fixed-07-31\n"
+        "created: 2026-01-01\n"
+        "target_folder: tasks\n"
+        "---\n"
+        "## Next Action (Template)\nX.\n",
+        encoding="utf-8",
+    )
+
+
+def test_report_note_written_every_run(vault, monkeypatch):
+    monkeypatch.setattr(_config, "VAULT_RECURRING_REPORT_PATH", "tasks/_recurring-report.md")
+    recurring.recurring_materialize(as_of="2026-08-01")
+    report = vault / "tasks" / "_recurring-report.md"
+    assert report.is_file()
+    raw = report.read_text(encoding="utf-8")
+    assert "type: recurring-run-report" in raw
+    assert "last_run:" in raw
+
+
+def test_alert_written_on_error_and_self_clears(vault, monkeypatch):
+    monkeypatch.setattr(_config, "VAULT_RECURRING_ALERT_PATH", "tasks/_recurring-alert.md")
+    _titleless_template(vault, "broken.md", "broken-tpl")
+    res = json.loads(recurring.recurring_materialize(template_id="broken-tpl", as_of="2026-08-01"))
+    assert res["errors"], res
+    alert = vault / "tasks" / "_recurring-alert.md"
+    assert alert.is_file()
+    raw = alert.read_text(encoding="utf-8")
+    assert "status: next" in raw
+    assert "source: recurring-materialize" in raw
+    assert "broken-tpl" in raw
+
+    # Give it a title -> clean run -> alert self-clears.
+    (vault / "templates" / "broken.md").write_text(
+        "---\ntype: recurring-template\nid: broken-tpl\ntitle: Now Fixed\n"
+        "recurrence_anchor_mode: absolute\nrecurrence_anchor: fixed-07-31\n"
+        "created: 2026-01-01\ntarget_folder: tasks\n---\n## Next Action (Template)\nX.\n",
+        encoding="utf-8",
+    )
+    res2 = json.loads(recurring.recurring_materialize(template_id="broken-tpl", as_of="2026-08-01"))
+    assert res2["errors"] == [], res2
+    assert not alert.exists()
+
+
+def test_dry_run_writes_no_alert_or_report(vault, monkeypatch):
+    monkeypatch.setattr(_config, "VAULT_RECURRING_ALERT_PATH", "tasks/_a.md")
+    monkeypatch.setattr(_config, "VAULT_RECURRING_REPORT_PATH", "tasks/_r.md")
+    _titleless_template(vault, "brk.md", "brk")
+    recurring.recurring_materialize(dry_run=True, template_id="brk", as_of="2026-08-01")
+    assert not (vault / "tasks" / "_a.md").exists()
+    assert not (vault / "tasks" / "_r.md").exists()
+
+
+def test_clear_alert_never_deletes_a_foreign_file(vault, monkeypatch):
+    monkeypatch.setattr(_config, "VAULT_RECURRING_ALERT_PATH", "tasks/_recurring-alert.md")
+    foreign = vault / "tasks" / "_recurring-alert.md"
+    foreign.write_text("---\ntitle: Mine\n---\nkeep me\n", encoding="utf-8")
+    res = json.loads(recurring.recurring_materialize(template_id="vat-return", as_of="2026-08-01"))
+    assert res["errors"] == []
+    assert foreign.exists()
+    assert "keep me" in foreign.read_text(encoding="utf-8")

@@ -46,6 +46,16 @@ VAULT_RECURRING_DONE_STATUS = (
 VAULT_RECURRING_INSTANCE_STATUS = (
     os.environ.get("VAULT_RECURRING_INSTANCE_STATUS", "next").strip() or "next"
 )
+# Run observability: surface a failing (usually unattended) run where the operator
+# looks instead of only in the log. Both are vault-relative paths; empty disables.
+#   ALERT_PATH  -> self-clearing task written on errors, deleted on a clean run.
+#   REPORT_PATH -> last-run report note overwritten every run.
+VAULT_RECURRING_ALERT_PATH = (
+    os.environ.get("VAULT_RECURRING_ALERT_PATH", "").strip().strip("/\\")
+)
+VAULT_RECURRING_REPORT_PATH = (
+    os.environ.get("VAULT_RECURRING_REPORT_PATH", "").strip().strip("/\\")
+)
 VAULT_RECURRING_CATCHUP_MODE = _env_choice(
     "VAULT_RECURRING_CATCHUP_MODE", "next", {"next", "all"}
 )

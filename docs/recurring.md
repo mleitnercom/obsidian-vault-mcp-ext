@@ -62,7 +62,10 @@ All knobs are read from `VAULT_RECURRING_*` environment variables at import time
 | `VAULT_RECURRING_ENABLED` | bool | `true` | Master switch. When false the tool returns `{"error_code": "recurring_disabled"}`. |
 | `VAULT_RECURRING_TEMPLATES_FOLDER` | string | _(empty)_ | Vault-relative folder scanned for template notes. **Required**; the tool returns `recurring_folder_unset` when empty. |
 | `VAULT_RECURRING_DONE_STATUS` | string | `done` | The `status` frontmatter value that marks an instance "completed" for relative-mode last-done lookup. |
+| `VAULT_RECURRING_INSTANCE_STATUS` | string | `next` | The `status` stamped onto a freshly materialized instance. Overridable per-instance via `frontmatter_to_inherit`. |
 | `VAULT_RECURRING_CATCHUP_MODE` | `next` \| `all` | `next` | Behavior when several absolute periods are pending. `next` keeps only the most recent; `all` materializes one instance per missed period. |
+| `VAULT_RECURRING_ALERT_PATH` | string | _(empty)_ | Vault-relative path for the self-clearing **alert task** (see [Run observability](#run-observability)). Empty disables it. |
+| `VAULT_RECURRING_REPORT_PATH` | string | _(empty)_ | Vault-relative path for the **run-report** note (see [Run observability](#run-observability)). Empty disables it. |
 | `VAULT_RECURRING_INTERVAL` | int (seconds) | `0` | Read from the environment but **not used in this port** (see note below). |
 
 Boolean parsing accepts `1/true/yes/on` (case-insensitive). `VAULT_PATH` is taken
@@ -75,6 +78,22 @@ vault in tests takes effect.
 > tool, driven on demand (MCP call) or by an external timer calling the CLI.
 > `VAULT_RECURRING_INTERVAL` is still parsed but has no effect; drive cadence with
 > a systemd timer / cron / Task Scheduler instead (see [CLI](#cli)).
+
+## Run observability
+
+Because materialization is driven by a timer / cron (this port has no in-process
+scheduler), a run's `errors` would otherwise only reach the caller's log. Two
+opt-in, vault-relative outputs route them into the vault instead; both are off
+unless their path is set, both are failure-isolated, and `dry_run` writes neither.
+
+- **`VAULT_RECURRING_ALERT_PATH`** — a self-clearing task (`status: next`,
+  `focus_date: today`) written with the failing templates when a run has errors,
+  so it surfaces in task views / the morning briefing; **deleted automatically**
+  on the next clean run. A `source: recurring-materialize` marker guards the
+  delete so a note you place at that path yourself is never removed.
+- **`VAULT_RECURRING_REPORT_PATH`** — a `type: recurring-run-report` note
+  overwritten every run with the counts and any error/warning detail, as a durable
+  last-run record for a Base / weekly view.
 
 ## Template schema
 

@@ -723,6 +723,148 @@ def _process_template(
 
 
 # --------------------------------------------------------------------------
+# Observability: surface run errors where the operator looks, not only in logs
+# --------------------------------------------------------------------------
+
+_ALERT_MARKER_SOURCE = "recurring-materialize"
+
+
+def _fmt_result_lines(items: list[dict[str, Any]], key: str) -> list[str]:
+    lines: list[str] = []
+    for it in items:
+        tid = it.get("template_id", "?")
+        period = it.get("period", "")
+        msg = it.get(key, "")
+        loc = f"{tid} [{period}]" if period else tid
+        lines.append(f"- **{loc}**: {msg}" if key == "error" else f"- {loc}: {msg}")
+    return lines
+
+
+def _counts_line(counts: dict[str, int]) -> str:
+    return (
+        f"geprüft {counts['checked']} · erstellt {counts['created']} · übersprungen "
+        f"{counts['skipped']} · Fehler {counts['errors']} · Warnungen {counts['warnings']}"
+    )
+
+
+def _write_alert(
+    rel_path: str,
+    errors: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+    counts: dict[str, int],
+    as_of: date,
+) -> None:
+    """Self-clearing alert task, written on a failing run; cleared on a clean run."""
+    today = format_iso(as_of)
+    n = len(errors)
+    metadata = {
+        "id": PurePosixPath(rel_path).stem,
+        "title": f"Recurring-Materialisierung fehlgeschlagen ({n})",
+        "status": "next",
+        "priority": 2,
+        "created": today,
+        "updated": today,
+        "focus_date": today,
+        "tags": ["recurring-alert"],
+        "source": _ALERT_MARKER_SOURCE,
+    }
+    body_lines = [
+        f"# Recurring-Materialisierung fehlgeschlagen ({n})",
+        "",
+        "## Next Action",
+        "Die unten gelisteten recurring-Templates prüfen und beheben. Diese Task "
+        "verschwindet automatisch, sobald ein Lauf ohne Fehler durchläuft.",
+        "",
+        "## Fehler",
+        "",
+        *_fmt_result_lines(errors, "error"),
+    ]
+    if warnings:
+        body_lines += ["", "## Warnungen", "", *_fmt_result_lines(warnings, "warning")]
+    body_lines += ["", "## Lauf", "", f"- {_counts_line(counts)}", f"- Stand: {today}", ""]
+    write_file_atomic(rel_path, dump_frontmatter(metadata, "\n".join(body_lines)), create_dirs=True)
+
+
+def _clear_alert(rel_path: str) -> None:
+    """Delete the alert task, but only if it carries our marker."""
+    try:
+        target = resolve_vault_path(rel_path)
+    except Exception:
+        return
+    if not target.exists():
+        return
+    try:
+        content, _meta = read_file(rel_path)
+        meta, _body = parse_frontmatter(content)
+    except Exception:
+        return
+    if (meta or {}).get("source") != _ALERT_MARKER_SOURCE:
+        return
+    try:
+        target.unlink()
+    except OSError:
+        logger.warning("recurring: could not delete alert task %s", rel_path)
+
+
+def _write_report(
+    rel_path: str,
+    errors: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+    counts: dict[str, int],
+    as_of: date,
+) -> None:
+    """Durable last-run report note, overwritten every run."""
+    today = format_iso(as_of)
+    metadata = {
+        "id": PurePosixPath(rel_path).stem,
+        "type": "recurring-run-report",
+        "last_run": today,
+        "checked": counts["checked"],
+        "created": counts["created"],
+        "skipped": counts["skipped"],
+        "errors": counts["errors"],
+        "warnings": counts["warnings"],
+        "tags": ["recurring-run-report"],
+    }
+    body_lines = [f"# Recurring-Lauf {today}", "", _counts_line(counts), ""]
+    if errors:
+        body_lines += ["## Fehler", "", *_fmt_result_lines(errors, "error"), ""]
+    if warnings:
+        body_lines += ["## Warnungen", "", *_fmt_result_lines(warnings, "warning"), ""]
+    if not errors and not warnings:
+        body_lines += ["Keine Fehler oder Warnungen.", ""]
+    write_file_atomic(rel_path, dump_frontmatter(metadata, "\n".join(body_lines)), create_dirs=True)
+
+
+def _emit_observability(
+    *,
+    errors: list[dict[str, Any]],
+    warnings: list[dict[str, Any]],
+    counts: dict[str, int],
+    as_of: date,
+    dry_run: bool,
+) -> None:
+    """Route run results to the operator's surfaces. Never raises."""
+    if dry_run:
+        return
+    alert_path = config.VAULT_RECURRING_ALERT_PATH
+    if alert_path:
+        try:
+            if errors:
+                _write_alert(alert_path, errors, warnings, counts, as_of)
+            else:
+                _clear_alert(alert_path)
+        except Exception:  # pragma: no cover - defensive
+            logger.warning("recurring: alert task update failed", exc_info=True)
+    report_path = config.VAULT_RECURRING_REPORT_PATH
+    if report_path:
+        try:
+            _write_report(report_path, errors, warnings, counts, as_of)
+        except Exception:  # pragma: no cover - defensive
+            logger.warning("recurring: run report write failed", exc_info=True)
+
+
+# --------------------------------------------------------------------------
 # Public tool entry point
 # --------------------------------------------------------------------------
 
@@ -845,6 +987,21 @@ def recurring_materialize(
 
     if template_id and not matched_filter:
         aggregate_errors.append({"template_id": template_id, "error": "template id not found"})
+
+    counts = {
+        "checked": checked,
+        "created": len(aggregate_created),
+        "skipped": len(aggregate_skipped),
+        "errors": len(aggregate_errors),
+        "warnings": len(aggregate_warnings),
+    }
+    _emit_observability(
+        errors=aggregate_errors,
+        warnings=aggregate_warnings,
+        counts=counts,
+        as_of=as_of_date,
+        dry_run=dry_run,
+    )
 
     return vault_json_dumps(
         {
