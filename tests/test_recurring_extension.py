@@ -335,3 +335,30 @@ def test_clear_alert_never_deletes_a_foreign_file(vault, monkeypatch):
     assert res["errors"] == []
     assert foreign.exists()
     assert "keep me" in foreign.read_text(encoding="utf-8")
+
+
+def test_multiyear_cadence_biennial(vault):
+    (vault / "templates" / "mm.md").write_text(
+        "---\n"
+        "type: recurring-template\n"
+        "id: mm\n"
+        "title: Biennial\n"
+        "recurrence_anchor_mode: absolute\n"
+        "recurrence_anchor: fixed-04-15\n"
+        "recurrence_year_cycle: 2\n"
+        "recurrence_year_base: 2027\n"
+        "created: 2026-01-01\n"
+        "target_folder: tasks\n"
+        "---\n"
+        "## Next Action (Template)\nHautcheck.\n",
+        encoding="utf-8",
+    )
+    # 2026 off-year, 2027 on, 2028 off, 2029 on
+    assert json.loads(recurring.recurring_materialize(template_id="mm", as_of="2026-05-01"))["created"] == []
+    r27 = json.loads(recurring.recurring_materialize(template_id="mm", as_of="2027-05-01"))
+    assert len(r27["created"]) == 1
+    assert "2027" in r27["created"][0]["period"]
+    assert json.loads(recurring.recurring_materialize(template_id="mm", as_of="2028-05-01"))["created"] == []
+    r29 = json.loads(recurring.recurring_materialize(template_id="mm", as_of="2029-05-01"))
+    assert len(r29["created"]) == 1
+    assert "2029" in r29["created"][0]["period"]

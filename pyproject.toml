@@ -1,6 +1,6 @@
 [project]
 name = "obsidian-vault-mcp-ext"
-version = "0.1.3"
+version = "0.1.4"
 description = "Personal/optional extensions for jimprosser/obsidian-web-mcp, loaded via its serve(extensions=...) seam (#57). Heavy/optional-dependency and personal features that intentionally stay out of upstream core."
 readme = "README.md"
 requires-python = ">=3.12"

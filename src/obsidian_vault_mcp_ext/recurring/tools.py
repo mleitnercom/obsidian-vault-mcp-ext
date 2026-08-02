@@ -513,6 +513,40 @@ def _update_template_last_run(
 # --------------------------------------------------------------------------
 
 
+def _apply_year_cadence(
+    periods: list[TriggeredPeriod],
+    template_meta: dict[str, Any],
+    template_id: str,
+    warnings: list[dict[str, Any]],
+) -> list[TriggeredPeriod]:
+    """Multi-year cadence for absolute templates (parity with the fork).
+
+    Keep only years matching ``(year - recurrence_year_base) % recurrence_year_cycle
+    == 0``. Default ``recurrence_year_cycle`` = 1 → annual, no filtering. A cycle > 1
+    needs ``recurrence_year_base``; if missing/invalid we warn and fall back to annual.
+    """
+    try:
+        year_cycle = int(template_meta.get("recurrence_year_cycle") or 1)
+    except (TypeError, ValueError):
+        year_cycle = 1
+    if year_cycle <= 1:
+        return periods
+    try:
+        year_base = int(template_meta.get("recurrence_year_base"))
+    except (TypeError, ValueError):
+        warnings.append(
+            {
+                "template_id": template_id,
+                "warning": (
+                    f"recurrence_year_cycle={year_cycle} but recurrence_year_base is "
+                    "missing/invalid; falling back to annual"
+                ),
+            }
+        )
+        return periods
+    return [p for p in periods if (p.trigger_date.year - year_base) % year_cycle == 0]
+
+
 def _process_template(
     *,
     template_path: str,
@@ -567,6 +601,7 @@ def _process_template(
                     since = implicit - timedelta(days=1)
                     implicit_baseline_used = True
             periods = compute_pending_periods(anchor, as_of, since, catchup=catchup)
+            periods = _apply_year_cadence(periods, template_meta, template_id, warnings)
             if not periods and (since is None or implicit_baseline_used):
                 skipped.append(
                     {"path": template_path, "template_id": template_id, "reason": "not_due"}
