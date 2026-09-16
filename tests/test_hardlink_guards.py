@@ -20,10 +20,12 @@ import json
 import os
 
 import pytest
+from mcp.server.fastmcp import FastMCP
 
 from obsidian_vault_mcp import config as host_config
 from obsidian_vault_mcp_ext.maintenance import tools as maintenance
 from obsidian_vault_mcp_ext.recurring import _config as recurring_config
+from obsidian_vault_mcp_ext.semantic import SemanticExtension
 from obsidian_vault_mcp_ext.recurring import tools as recurring
 from obsidian_vault_mcp_ext.semantic import _config as semantic_config
 from obsidian_vault_mcp_ext.semantic import tools as semantic_tools
@@ -110,6 +112,7 @@ def test_semantic_search_finds_the_copy_but_never_the_link(copy_and_link, monkey
     monkeypatch.setattr(semantic_config, "SEMANTIC_BUILD_ON_DEMAND", True)
     semantic_tools.set_engine(None)
     try:
+        SemanticExtension().register_tools(FastMCP("test"))
         reindex = json.loads(semantic_tools.vault_reindex(full=True))
         assert "error" not in reindex, reindex
         result = json.loads(semantic_tools.vault_semantic_search(CANARY, max_results=20))

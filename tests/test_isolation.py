@@ -14,9 +14,19 @@ def test_templates_imports_standalone():
 
 def test_templates_pulls_no_embedding_deps():
     # Importing the templates feature must not drag in the semantic extra's heavy deps.
-    importlib.import_module("obsidian_vault_mcp_ext.templates")
-    for heavy in ("faiss", "fastembed", "sentence_transformers"):
-        assert heavy not in sys.modules, f"templates import pulled in {heavy}"
+    # Checked in a fresh interpreter: in this process any test that ran a real semantic
+    # reindex has already imported faiss, which made this fail whenever the extra was
+    # installed, regardless of what templates imports.
+    import subprocess
+
+    code = (
+        "import sys\n"
+        "import obsidian_vault_mcp_ext.templates\n"
+        "for heavy in ('faiss', 'fastembed', 'sentence_transformers'):\n"
+        "    assert heavy not in sys.modules, 'templates import pulled in ' + heavy\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_imports_extension_imports_standalone():
