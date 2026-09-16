@@ -63,7 +63,7 @@ python run_vault.py
 
 ## Extensions
 
-All five are shipped and tested (the semantic full reindex + search round trip is
+All six are shipped and tested (the semantic full reindex + search round trip is
 verified on Python 3.12 with the `[semantic]` extra installed).
 
 - **TemplatesExtension** — `{{token}}` rendering (not full Templater; `<% %>` is rejected)
@@ -99,6 +99,15 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   rewriting atomically (`vault_repair_encoding`), and soft-delete directories into the vault's
   trash folder (`vault_delete_directory`). Vault-confined, skips hidden dirs/symlinks, no extra
   dependencies (stdlib only). See [docs/maintenance.md](docs/maintenance.md).
+
+- **OcrExtension** - OCR text for screenshots and scanned PDFs through the host's own
+  `vault_read` / `vault_batch_read`, no new tool. Registers a content extractor with the
+  host's `register_content_extractor` seam (jimprosser#63), so it needs a host that has
+  that seam; on an older host it logs once and stays off. The host consults extractors only
+  from the read tools, so OCR text can never be written back over the original by
+  `vault_edit` / `vault_append` / frontmatter updates. External commands run without a
+  shell, `{path}` is substituted as a single argument, results are cached by size and
+  mtime. Off until `VAULT_OCR_ENABLED`. See [docs/ocr.md](docs/ocr.md).
 
 ### Hardlinks
 
@@ -165,6 +174,18 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_IMPORT_MAX_BYTES` | `10485760` | Hard size cap (bytes) for URL and file import. |
 | `VAULT_IMPORT_ALLOWED_MEDIA_TYPES_JSON` | _(images + PDF)_ | JSON `{media_type: [".ext"]}` overriding the default allowlist. |
 | `VAULT_IMPORT_FILE_ALLOWED_ROOTS` | _(empty)_ | OS-pathsep list of roots `vault_import_file` may read from. Empty disables it. |
+
+### OCR
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_OCR_ENABLED` | `false` | Master switch; nothing is registered until set. |
+| `VAULT_OCR_IMAGE_EXTENSIONS` | `.png,.jpg,.jpeg,.webp,.tif,.tiff` | Suffixes sent to the image command. |
+| `VAULT_OCR_IMAGE_CMD` | `tesseract {path} - -l eng` | Image OCR command; must print text to stdout. |
+| `VAULT_OCR_PDF_CMD` | _(empty)_ | PDF OCR command (renders pages first, e.g. a pdftoppm + tesseract wrapper). Empty disables PDFs. |
+| `VAULT_OCR_TIMEOUT` | `120` | Seconds before a command is killed and the read declines. |
+| `VAULT_OCR_MAX_FILE_BYTES` | `52428800` | Larger files are not OCR'd. |
+| `VAULT_OCR_CACHE_ENTRIES` | `256` | In-memory results keyed by path, size and mtime; `0` disables. |
 
 ### Maintenance
 

@@ -9,16 +9,18 @@ from obsidian_vault_mcp.server import serve
 
 from .imports import ImportExtension
 from .maintenance import MaintenanceExtension
+from .ocr import OcrExtension
 from .recurring import RecurringExtension
 from .semantic import SemanticExtension
 from .templates import TemplatesExtension
 
 
 def main() -> None:
-    # Default entry point loads all five; semantic fails soft without its [semantic] extra,
-    # and import stays inert until VAULT_IMPORT_URL_ENABLED / VAULT_IMPORT_FILE_ALLOWED_ROOTS.
+    # Default entry point loads all six; semantic fails soft without its [semantic] extra,
+    # import stays inert until VAULT_IMPORT_URL_ENABLED / VAULT_IMPORT_FILE_ALLOWED_ROOTS,
+    # and OCR until VAULT_OCR_ENABLED.
     # For a subset, write your own entry point and pass only the extensions you want.
-    serve([TemplatesExtension(), SemanticExtension(), RecurringExtension(), ImportExtension(), MaintenanceExtension()])
+    serve([TemplatesExtension(), SemanticExtension(), RecurringExtension(), ImportExtension(), MaintenanceExtension(), OcrExtension()])
 
 
 if __name__ == "__main__":
