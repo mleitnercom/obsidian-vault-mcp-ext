@@ -16,6 +16,7 @@ from typing import Any
 from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import read_file, resolve_vault_path, write_file_atomic
 
+from .._hardlinks import has_extra_hard_links
 from . import _config as config
 from ._rest import ObsidianRestError, obsidian_rest_request
 
@@ -73,6 +74,8 @@ def _resolve_template_file(template_path: str) -> Path:
         except ValueError:
             continue
         if resolved.is_file():
+            if has_extra_hard_links(resolved):
+                raise ValueError(f"Refusing hardlinked template: {candidate}")
             return resolved
     raise FileNotFoundError(f"Template not found: {template_path}")
 
@@ -87,7 +90,7 @@ def vault_template_list(folder: str | None = None, recursive: bool = True) -> st
         iterator = root.rglob("*.md") if recursive else root.glob("*.md")
         templates = []
         for item in sorted(iterator, key=lambda path: path.as_posix().lower()):
-            if not item.is_file():
+            if not item.is_file() or has_extra_hard_links(item):
                 continue
             try:
                 rel_path = _vault_relative(item)

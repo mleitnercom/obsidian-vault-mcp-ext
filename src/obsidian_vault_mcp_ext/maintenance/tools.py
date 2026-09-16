@@ -17,6 +17,7 @@ from pathlib import Path
 from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import resolve_vault_path, write_file_atomic
 
+from .._hardlinks import has_extra_hard_links
 from . import _config as config
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,10 @@ def _iter_markdown_files(path_prefix: str):
         if _is_hidden_or_excluded(rel.parts):
             continue
         if path.is_symlink() or not path.is_file():
+            continue
+        # The repair would replace a hardlink with a decoded copy of the outside file,
+        # turning outside content into a regular note that every later guard accepts.
+        if has_extra_hard_links(path):
             continue
         yield path, rel.as_posix()
 

@@ -23,6 +23,8 @@ from pathlib import Path
 
 from obsidian_vault_mcp.vault import resolve_vault_path
 
+from .._hardlinks import has_extra_hard_links
+
 from . import _config as config
 from .chunker import chunk_markdown_file
 from .models import Chunk
@@ -719,5 +721,10 @@ class SemanticSearchEngine:
             return False
         parts = Path(rel_path).parts
         if bool(set(parts) & config.EXCLUDED_DIRS):
+            return False
+        # Chunks of a hardlinked file would put outside content into semantic search.
+        # One decision point serves the full reindex, the incremental reindex and change
+        # detection; each drops the path once this answers False.
+        if has_extra_hard_links(config.VAULT_PATH / rel_path):
             return False
         return _resolves_in_vault(config.VAULT_PATH / rel_path)

@@ -37,6 +37,7 @@ from typing import Any
 from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import read_file, resolve_vault_path, write_file_atomic
 
+from .._hardlinks import has_extra_hard_links
 from . import _config as config
 from .helpers import (
     AnchorError,
@@ -82,7 +83,7 @@ def _list_markdown_paths(folder: str) -> list[str]:
     root = _vault_root()
     paths: list[str] = []
     for md_path in sorted(base_dir.rglob("*.md")):
-        if md_path.is_symlink() or not md_path.is_file():
+        if md_path.is_symlink() or not md_path.is_file() or has_extra_hard_links(md_path):
             continue
         if any(part in _EXCLUDED_DIR_NAMES for part in md_path.parts):
             continue

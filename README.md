@@ -100,6 +100,16 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   trash folder (`vault_delete_directory`). Vault-confined, skips hidden dirs/symlinks, no extra
   dependencies (stdlib only). See [docs/maintenance.md](docs/maintenance.md).
 
+### Hardlinks
+
+Every extension that reads or enumerates vault files skips files with more than one hard
+link (`st_nlink > 1`): semantic indexing, the encoding scan and repair, template listing and
+rendering, and recurring template enumeration. A hardlink to a file outside the vault is a
+real directory entry, so containment checks cannot see it. Upstream #79 guards the host's
+own read paths; the extensions read files directly or walk the tree themselves, which that
+guard does not reach, and on a host older than #79 there is no host guard at all. Tested
+against both host states. Legitimate in-vault hardlinks are unsupported as a consequence.
+
 Planned: `AuditExtension` (once a write-listener seam lands upstream, jimprosser#58).
 
 ## Configuration
