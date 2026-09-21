@@ -38,6 +38,7 @@ from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import read_file, resolve_vault_path, write_file_atomic
 
 from .._hardlinks import has_extra_hard_links
+from .._mutations import mutation
 from . import _config as config
 from .helpers import (
     AnchorError,
@@ -489,7 +490,9 @@ def _last_done_for(
 
 def _write_text_verified(rel_path: str, content: str) -> int:
     """Atomic write + read-back verification."""
-    _, size = write_file_atomic(rel_path, content, create_dirs=True)
+    with mutation("recurring_materialize", rel_path) as m:
+        is_new, size = write_file_atomic(rel_path, content, create_dirs=True)
+        m.created = is_new
     written_back, _ = read_file(rel_path)
     if written_back != content:
         raise RuntimeError(f"Recurring instance write verification failed for {rel_path!r}")
@@ -818,7 +821,9 @@ def _write_alert(
     if warnings:
         body_lines += ["", "## Warnungen", "", *_fmt_result_lines(warnings, "warning")]
     body_lines += ["", "## Lauf", "", f"- {_counts_line(counts)}", f"- Stand: {today}", ""]
-    write_file_atomic(rel_path, dump_frontmatter(metadata, "\n".join(body_lines)), create_dirs=True)
+    with mutation("recurring_materialize", rel_path) as m:
+        is_new, _ = write_file_atomic(rel_path, dump_frontmatter(metadata, "\n".join(body_lines)), create_dirs=True)
+        m.created = is_new
 
 
 def _clear_alert(rel_path: str) -> None:
@@ -837,7 +842,9 @@ def _clear_alert(rel_path: str) -> None:
     if (meta or {}).get("source") != _ALERT_MARKER_SOURCE:
         return
     try:
-        target.unlink()
+        with mutation("recurring_materialize", rel_path) as m:
+            target.unlink()
+            m.event = "deleted"
     except OSError:
         logger.warning("recurring: could not delete alert task %s", rel_path)
 
@@ -869,7 +876,9 @@ def _write_report(
         body_lines += ["## Warnungen", "", *_fmt_result_lines(warnings, "warning"), ""]
     if not errors and not warnings:
         body_lines += ["Keine Fehler oder Warnungen.", ""]
-    write_file_atomic(rel_path, dump_frontmatter(metadata, "\n".join(body_lines)), create_dirs=True)
+    with mutation("recurring_materialize", rel_path) as m:
+        is_new, _ = write_file_atomic(rel_path, dump_frontmatter(metadata, "\n".join(body_lines)), create_dirs=True)
+        m.created = is_new
 
 
 def _emit_observability(

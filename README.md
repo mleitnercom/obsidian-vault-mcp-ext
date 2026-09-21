@@ -109,6 +109,16 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   shell, `{path}` is substituted as a single argument, results are cached by size and
   mtime. Off until `VAULT_OCR_ENABLED`. See [docs/ocr.md](docs/ocr.md).
 
+### Audit and write events
+
+Every write an extension makes is reported the way the host reports its own: one audit
+record when the host's `VAULT_AUDIT_LOG_PATH` is set, and a write event (`created`,
+`updated` or `deleted`) for every listener registered with `register_write_listener`.
+That covers template apply, recurring instances with their alert and report notes, URL and
+file import, encoding repair and directory soft-delete. The operation name in the audit
+record is the tool's name. Uses only public host API; on a host older than the audit log
+(#56) and the write-listener seam (#62) it does nothing.
+
 ### Hardlinks
 
 Every extension that reads or enumerates vault files skips files with more than one hard

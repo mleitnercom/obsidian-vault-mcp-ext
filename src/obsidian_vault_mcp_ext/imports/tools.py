@@ -15,6 +15,7 @@ from pathlib import Path
 from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import resolve_vault_path
 
+from .._mutations import mutation
 from . import _config
 from ._fetch import ImportFetchError, ImportSecurityError, fetch_url
 
@@ -117,7 +118,9 @@ def vault_import_url(
                     "actual_sha256": actual_sha256,
                 }
             )
-        is_new, size = _write_bytes_atomic(resolved, data, create_dirs=create_dirs, overwrite=overwrite)
+        with mutation("vault_import_url", path) as m:
+            is_new, size = _write_bytes_atomic(resolved, data, create_dirs=create_dirs, overwrite=overwrite)
+            m.created = is_new
         return vault_json_dumps(
             {
                 "path": path,
@@ -190,7 +193,9 @@ def vault_import_file(
                     "actual_sha256": actual_sha256,
                 }
             )
-        is_new, size = _write_bytes_atomic(resolved, data, create_dirs=create_dirs, overwrite=overwrite)
+        with mutation("vault_import_file", path) as m:
+            is_new, size = _write_bytes_atomic(resolved, data, create_dirs=create_dirs, overwrite=overwrite)
+            m.created = is_new
         return vault_json_dumps(
             {
                 "path": path,

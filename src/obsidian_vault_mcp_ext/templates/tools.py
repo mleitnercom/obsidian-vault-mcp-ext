@@ -17,6 +17,7 @@ from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import read_file, resolve_vault_path, write_file_atomic
 
 from .._hardlinks import has_extra_hard_links
+from .._mutations import mutation
 from . import _config as config
 from ._rest import ObsidianRestError, obsidian_rest_request
 
@@ -231,7 +232,9 @@ def vault_template_apply(
         if "error" in rendered_result:
             return vault_json_dumps(rendered_result)
         # Upstream-public atomic write (returns (is_new, size)); replaces the fork's vault_write tool.
-        is_new, size = write_file_atomic(target_path, rendered_result["content"], create_dirs=True)
+        with mutation("vault_template_apply", target_path) as m:
+            is_new, size = write_file_atomic(target_path, rendered_result["content"], create_dirs=True)
+            m.created = is_new
         return vault_json_dumps(
             {
                 "path": target_path,

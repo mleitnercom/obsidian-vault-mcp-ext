@@ -18,6 +18,7 @@ from obsidian_vault_mcp.serialization import dumps as vault_json_dumps
 from obsidian_vault_mcp.vault import resolve_vault_path, write_file_atomic
 
 from .._hardlinks import has_extra_hard_links
+from .._mutations import mutation
 from . import _config as config
 
 logger = logging.getLogger(__name__)
@@ -120,7 +121,8 @@ def vault_repair_encoding(
                 )
             else:
                 if not dry_run:
-                    write_file_atomic(rel, decoded)
+                    with mutation("vault_repair_encoding", rel):
+                        write_file_atomic(rel, decoded)
                 repaired.append(
                     {
                         "path": rel,
@@ -179,8 +181,11 @@ def vault_delete_directory(path: str, only_if_empty: bool = True) -> str:
             ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
             dest = trash_dir / f"{resolved.name}_{ts}"
 
-        shutil.move(str(resolved), str(dest))
-        trashed_to = dest.resolve().relative_to(_vault_root()).as_posix()
+        trashed_to = dest.relative_to(_vault_root()).as_posix()
+        with mutation("vault_delete_directory", path) as m:
+            shutil.move(str(resolved), str(dest))
+            # The host reports its own soft delete (vault_delete -> .trash) as "deleted".
+            m.event = "deleted"
         return vault_json_dumps({"path": path, "deleted": True, "trashed_to": trashed_to})
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         return vault_json_dumps({"error": str(exc), "path": path})
