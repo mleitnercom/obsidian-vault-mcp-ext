@@ -55,8 +55,13 @@ def _auditing() -> bool:
 
 
 @contextmanager
-def mutation(operation: str, path: str):
-    """Audit and announce one extension write to ``path`` (vault-relative)."""
+def mutation(operation: str, path: str, *, announce: bool = True):
+    """Audit and announce one extension write to ``path`` (vault-relative).
+
+    ``announce=False`` records the audit entry only, for a write that goes through a host
+    tool implementation which fires its own write event (the compat tools wrap
+    ``vault_edit``); announcing it again would tell every listener twice.
+    """
     auditing = _auditing()
     # Only hashed when a record will be written: snapshot_path reads the whole file.
     before = _snapshot_path(path) if auditing else None
@@ -87,5 +92,5 @@ def mutation(operation: str, path: str):
                 operation_status="success",
             )
         )
-    if _fire_write is not None:
+    if announce and _fire_write is not None:
         _fire_write(event, state.paths or [path])
