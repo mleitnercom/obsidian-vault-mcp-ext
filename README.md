@@ -63,7 +63,7 @@ python run_vault.py
 
 ## Extensions
 
-All six are shipped and tested (the semantic full reindex + search round trip is
+All nine are shipped and tested (the semantic full reindex + search round trip is
 verified on Python 3.12 with the `[semantic]` extra installed).
 
 - **TemplatesExtension** — `{{token}}` rendering (not full Templater; `<% %>` is rejected)
@@ -108,6 +108,25 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   `vault_edit` / `vault_append` / frontmatter updates. External commands run without a
   shell, `{path}` is substituted as a single argument, results are cached by size and
   mtime. Off until `VAULT_OCR_ENABLED`. See [docs/ocr.md](docs/ocr.md).
+  OCR text is also persisted next to its source as `<file>.ocr.txt`, in the fork's exact
+  format, so it survives a restart and fork-era sidecars are reused without re-running
+  OCR. The OCR command runs with a scrubbed environment: no server token or secrets.
+  Note: the host's `vault_search` looks at `*.md` by default, so sidecar text is found
+  with `file_pattern="*.ocr.txt"` or `"*"`.
+
+- **PdfTextExtension** - the text layer of a PDF through `vault_read`, with pypdf (optional
+  `[pdf]` extra). The host reads no PDF on its own. Declines scans (so OCR gets them next),
+  PDFs that need a password (an owner-only password is fine) and damaged files. Load it
+  before `OcrExtension`: extractors are consulted in registration order.
+
+- **CompatExtension** - the fork's tool names for clients and skills written against it:
+  `vault_str_replace`, `vault_patch`, `vault_batch_replace` (all through the host's
+  `vault_edit`, so every upstream protection applies) and `vault_tree`. Same result fields
+  as the fork.
+
+- **CreateNoteExtension** - `vault_create_note`, a write path that can never replace an
+  existing file, for automated clients. The same `VAULT_CREATE_NOTE_*` policy variables as
+  the fork; inert until `VAULT_CREATE_NOTE_PATH_PATTERN` is set.
 
 ### Audit and write events
 
@@ -115,7 +134,8 @@ Every write an extension makes is reported the way the host reports its own: one
 record when the host's `VAULT_AUDIT_LOG_PATH` is set, and a write event (`created`,
 `updated` or `deleted`) for every listener registered with `register_write_listener`.
 That covers template apply, recurring instances with their alert and report notes, URL and
-file import, encoding repair and directory soft-delete. The operation name in the audit
+file import, encoding repair, directory soft-delete, the compat edit tools, created notes
+and OCR sidecars. The operation name in the audit
 record is the tool's name. Uses only public host API; on a host older than the audit log
 (#56) and the write-listener seam (#62) it does nothing.
 
@@ -129,7 +149,13 @@ own read paths; the extensions read files directly or walk the tree themselves, 
 guard does not reach, and on a host older than #79 there is no host guard at all. Tested
 against both host states. Legitimate in-vault hardlinks are unsupported as a consequence.
 
-Planned: `AuditExtension` (once a write-listener seam lands upstream, jimprosser#58).
+### Command line
+
+- `vault-mcp-ext` - the server with all nine extensions.
+- `vault-mcp-ext-semantic reindex --mode full|incremental` and `status` - the nightly
+  semantic rebuild for a systemd timer; exits non-zero when nothing was rebuilt.
+- `vault-mcp-ext-recurring run` - one recurring materialization, as an alternative to the
+  in-process scheduler (`VAULT_RECURRING_INTERVAL`).
 
 ## Configuration
 
@@ -170,7 +196,7 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_RECURRING_TEMPLATES_FOLDER` | _(empty)_ | Vault-relative folder of template notes. Required. |
 | `VAULT_RECURRING_DONE_STATUS` | `done` | `status` value marking an instance completed (relative mode). |
 | `VAULT_RECURRING_CATCHUP_MODE` | `next` | `next` (most recent pending period) or `all` (one per missed period). |
-| `VAULT_RECURRING_INTERVAL` | `0` | Parsed but unused in this port (no internal scheduler; drive via the CLI). |
+| `VAULT_RECURRING_INTERVAL` | `0` | Seconds between runs of the in-process scheduler (first run after one interval). `0` means no scheduler; use the CLI. |
 
 ### Import
 
@@ -196,6 +222,19 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_OCR_TIMEOUT` | `120` | Seconds before a command is killed and the read declines. |
 | `VAULT_OCR_MAX_FILE_BYTES` | `52428800` | Larger files are not OCR'd. |
 | `VAULT_OCR_CACHE_ENTRIES` | `256` | In-memory results keyed by path, size and mtime; `0` disables. |
+| `VAULT_OCR_SIDECAR_ENABLED` | `true` | Persist OCR text as `<file>.ocr.txt` and reuse it. |
+| `VAULT_OCR_SIDECAR_SUFFIX` | `.ocr.txt` | Sidecar suffix; keep the default to reuse fork-era sidecars. |
+
+### Create note
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VAULT_CREATE_NOTE_PATH_PATTERN` | _(empty)_ | Regex the vault-relative path must fully match. Empty disables the tool. |
+| `VAULT_CREATE_NOTE_REQUIRED_FRONTMATTER` | _(empty)_ | JSON `{field: regex or true}`. |
+| `VAULT_CREATE_NOTE_ALLOWED_FRONTMATTER` | _(empty)_ | Comma-separated field allowlist; empty allows any. |
+| `VAULT_CREATE_NOTE_ID_FIELD` | _(empty)_ | Field whose value must equal the filename stem. |
+| `VAULT_CREATE_NOTE_REQUIRE_BODY_SECTION` | _(empty)_ | Literal text the body must contain. |
+| `VAULT_CREATE_NOTE_MAX_BYTES` | `16000` | Per-note size limit. |
 
 ### Maintenance
 

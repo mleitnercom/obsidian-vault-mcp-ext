@@ -11,7 +11,7 @@ The classes are exposed lazily so that importing or using one extension never im
 sibling (and never pulls a sibling's optional dependencies).
 """
 
-__all__ = ["TemplatesExtension", "SemanticExtension", "RecurringExtension", "ImportExtension", "MaintenanceExtension", "OcrExtension"]
+__all__ = ["TemplatesExtension", "SemanticExtension", "RecurringExtension", "ImportExtension", "MaintenanceExtension", "OcrExtension", "CompatExtension", "CreateNoteExtension", "PdfTextExtension"]
 
 
 def __getattr__(name: str):
@@ -30,6 +30,15 @@ def __getattr__(name: str):
     if name == "MaintenanceExtension":
         from .maintenance import MaintenanceExtension
         return MaintenanceExtension
+    if name == "CompatExtension":
+        from .compat import CompatExtension
+        return CompatExtension
+    if name == "CreateNoteExtension":
+        from .createnote import CreateNoteExtension
+        return CreateNoteExtension
+    if name == "PdfTextExtension":
+        from .pdftext import PdfTextExtension
+        return PdfTextExtension
     if name == "OcrExtension":
         from .ocr import OcrExtension
         return OcrExtension

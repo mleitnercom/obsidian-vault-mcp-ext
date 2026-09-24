@@ -1,8 +1,8 @@
 """Standalone CLI for recurring materialization (systemd-timer style).
 
 Materializes pending periods once against the configured vault, prints the JSON
-result on stdout, and returns an exit code. Provided as a callable ``cli_main``;
-no console-script is wired (that is the host operator's choice). Unlike the fork's
+result on stdout, and returns an exit code. Installed as ``vault-mcp-ext-recurring``;
+the in-process scheduler in extension.py is the alternative. Unlike the fork's
 CLI, there is no frontmatter-index bootstrap: idempotency and relative-mode
 "last done" lookups are disk-based (see recurring/tools.py).
 """
@@ -43,3 +43,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     sys.stdout.write(result)
     sys.stdout.write("\n")
     return 0
+
+
+def main() -> None:  # console-script entry point
+    raise SystemExit(cli_main())

@@ -1,14 +1,21 @@
 """RecurringExtension: recurring-template materialization as a seam extension.
 
-Exposes ``recurring_materialize`` as an MCP tool through the host's extension seam
-without forking the host. The fork's optional in-process scheduler tied to the
-server lifespan is intentionally OUT OF SCOPE here -- materialization is a tool;
-the CLI lives in ``recurring/cli.py`` (no console-script wiring).
+Exposes ``recurring_materialize`` as an MCP tool and, when VAULT_RECURRING_INTERVAL is
+set, runs it on that interval in the server process, the way the fork did: wait one
+interval, materialize, repeat. A failing run is logged and the loop carries on; the
+run-report and alert notes (VAULT_RECURRING_REPORT_PATH / _ALERT_PATH) make failures
+visible in the vault. ``recurring/cli.py`` stays available for a systemd timer instead.
 """
+
+import logging
+import threading
 
 from obsidian_vault_mcp.extensions import Extension
 
+from . import _config as config
 from . import tools
+
+logger = logging.getLogger(__name__)
 
 _WRITE = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 
@@ -20,6 +27,10 @@ class RecurringExtension(Extension):
     nothing new. Requires ``VAULT_RECURRING_TEMPLATES_FOLDER`` to be set; returns
     a capability error otherwise (fail-soft).
     """
+
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
 
     def register_tools(self, mcp) -> None:
         mcp.tool(
@@ -33,3 +44,25 @@ class RecurringExtension(Extension):
             ),
             annotations=_WRITE,
         )(tools.recurring_materialize)
+
+    def after_indexes_start(self, frontmatter_index) -> None:
+        interval = config.VAULT_RECURRING_INTERVAL
+        if not config.VAULT_RECURRING_ENABLED or interval <= 0 or self._thread is not None:
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._loop, args=(interval,), name="recurring-scheduler", daemon=True)
+        self._thread.start()
+        logger.info("Recurring scheduler started (every %ss)", interval)
+
+    def _loop(self, interval: float) -> None:
+        while not self._stop.wait(interval):
+            try:
+                tools.recurring_materialize()
+            except Exception:  # noqa: BLE001 - a broken template must not end the loop
+                logger.exception("Recurring scheduler iteration failed")
+
+    def shutdown(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=10)
+            self._thread = None

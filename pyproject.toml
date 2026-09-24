@@ -1,6 +1,6 @@
 [project]
 name = "obsidian-vault-mcp-ext"
-version = "0.2.1"
+version = "0.3.0"
 description = "Personal/optional extensions for jimprosser/obsidian-web-mcp, loaded via its serve(extensions=...) seam (#57). Heavy/optional-dependency and personal features that intentionally stay out of upstream core."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -30,6 +30,9 @@ dev = [
 
 [project.scripts]
 vault-mcp-ext = "obsidian_vault_mcp_ext.__main__:main"
+# For systemd timers: the nightly semantic rebuild and a once-off recurring run.
+vault-mcp-ext-semantic = "obsidian_vault_mcp_ext.semantic.cli:main"
+vault-mcp-ext-recurring = "obsidian_vault_mcp_ext.recurring.cli:main"
 
 [build-system]
 requires = ["hatchling"]
