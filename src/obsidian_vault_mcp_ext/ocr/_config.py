@@ -42,3 +42,9 @@ OCR_MAX_FILE_BYTES = _env_int("VAULT_OCR_MAX_FILE_BYTES", 50 * 1024 * 1024)
 # Results are cached in memory by (path, size, mtime), so repeated reads of an unchanged
 # file do not run OCR again. 0 disables the cache.
 OCR_CACHE_ENTRIES = _env_int("VAULT_OCR_CACHE_ENTRIES", 256)
+
+# Persist OCR text next to its source as <file>.ocr.txt, in the fork's format, so it
+# survives a restart, is reused instead of re-running OCR, and existing fork-era
+# sidecars keep working. Off only if explicitly disabled.
+OCR_SIDECAR_ENABLED = _env_bool("VAULT_OCR_SIDECAR_ENABLED", True)
+OCR_SIDECAR_SUFFIX = os.environ.get("VAULT_OCR_SIDECAR_SUFFIX", ".ocr.txt").strip() or ".ocr.txt"
