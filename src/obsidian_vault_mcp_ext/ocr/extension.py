@@ -4,6 +4,8 @@ import logging
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import declare
+
 from . import _config as config
 from . import extractor
 
@@ -24,6 +26,10 @@ class OcrExtension(Extension):
 
     def __init__(self) -> None:
         self.registered = False
+
+    def register_tools(self, mcp) -> None:
+        # No tools, but the sidecar writes are audited under their own name.
+        declare({"ocr_sidecar": "mutation"})
 
     def before_indexes_start(self, frontmatter_index) -> None:
         self.register()

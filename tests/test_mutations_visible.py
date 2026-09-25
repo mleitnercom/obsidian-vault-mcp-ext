@@ -170,7 +170,7 @@ def test_a_failed_write_is_recorded_as_an_error_and_fires_nothing(vault, audit_l
 def test_with_auditing_off_events_still_fire_and_nothing_is_hashed(vault, events, monkeypatch):
     """Snapshots read the whole file; with auditing off nothing records them."""
     monkeypatch.setattr(host_config, "VAULT_AUDIT_LOG_PATH", "")
-    monkeypatch.setattr(_mutations, "_snapshot_path", lambda path: pytest.fail("hashed a file with auditing off"))
+    monkeypatch.setattr(_mutations, "snapshot_path", lambda path: pytest.fail("hashed a file with auditing off"))
     (vault / "alt.md").write_bytes("Geschäftsführer\n".encode("cp1252"))
 
     json.loads(maintenance.vault_repair_encoding())

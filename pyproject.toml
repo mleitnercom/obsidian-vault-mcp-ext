@@ -1,13 +1,13 @@
 [project]
 name = "obsidian-vault-mcp-ext"
-version = "0.3.0"
+version = "0.4.0"
 description = "Personal/optional extensions for jimprosser/obsidian-web-mcp, loaded via its serve(extensions=...) seam (#57). Heavy/optional-dependency and personal features that intentionally stay out of upstream core."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    # The host MCP server providing the Extension seam (serve/extensions, #57).
-    # Installed editable from a local checkout during development.
-    "obsidian-web-mcp>=0.1.0",
+    # The host MCP server. 0.4.0 is the first release with the public audit API for
+    # extensions (register_audit_operation, run_audited; upstream #93).
+    "obsidian-web-mcp>=0.4.0",
 ]
 
 [project.optional-dependencies]

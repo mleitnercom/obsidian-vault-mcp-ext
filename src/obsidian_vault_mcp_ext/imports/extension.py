@@ -2,6 +2,8 @@
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import declare
+
 from . import tools
 
 _WRITE = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": True}
@@ -19,6 +21,10 @@ class ImportExtension(Extension):
     """
 
     def register_tools(self, mcp) -> None:
+        declare({
+            "vault_import_url": "mutation",
+            "vault_import_file": "mutation",
+        })
         mcp.tool(
             name="vault_import_url",
             description=(

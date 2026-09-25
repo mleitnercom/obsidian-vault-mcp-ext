@@ -36,18 +36,26 @@ def extract(relative_path: str, path: Path) -> str | None:
             if reader.decrypt("") == 0:
                 logger.info("PDF text: %s needs a password, declining", relative_path)
                 return None
-        pages = []
+        per_page = []
         for page in reader.pages:
             try:
                 text = (page.extract_text() or "").strip()
             except Exception:  # noqa: BLE001 - one broken page must not lose the rest
                 text = ""
-            if text:
-                pages.append(text)
+            per_page.append(text)
     except Exception as exc:  # noqa: BLE001 - a damaged PDF is a decline, not a crash
         logger.info("PDF text: could not read %s: %s", relative_path, exc)
         return None
 
+    pages = [text for text in per_page if text]
     if not pages:
         return None
+    if len(pages) < len(per_page):
+        # A mixed PDF (a scan with an e-signature trail, say): with partial OCR on, the
+        # pages without text are OCR'd and merged in; otherwise the text layer as before.
+        from ..ocr import extractor as ocr
+
+        merged = ocr.extract_partial(relative_path, path, per_page)
+        if merged is not None:
+            return merged
     return "\n\n".join(pages)

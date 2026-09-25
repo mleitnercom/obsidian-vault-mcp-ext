@@ -1,9 +1,8 @@
 """Configuration for the create-note extension.
 
 The same VAULT_CREATE_NOTE_* variables the fork read, so a production environment carries
-over unchanged. The tool is inert until VAULT_CREATE_NOTE_PATH_PATTERN is set: with no
-statement about which paths are eligible, any creation would be a guess, so the
-unconfigured state refuses rather than allows.
+over unchanged. All optional: unset, the tool creates any Markdown note that does not
+exist yet (as the fork does since v0.15.0); set, they narrow it.
 
 PATH_PATTERN            regex the vault-relative path must fully match
 REQUIRED_FRONTMATTER    JSON object {field: regex or true}; each field must be present
@@ -12,7 +11,7 @@ ALLOWED_FRONTMATTER     comma-separated field allowlist; empty means "any field"
                         non-empty must cover every required field
 ID_FIELD                frontmatter field whose value must equal the filename stem
 REQUIRE_BODY_SECTION    literal string the body must contain (e.g. a heading)
-MAX_BYTES               per-note ceiling
+MAX_BYTES               per-note ceiling; 0 (default) means the host's MAX_CONTENT_SIZE
 
 VAULT_PATH is resolved from the host config on each access, so tests that monkeypatch it
 take effect.
@@ -38,7 +37,7 @@ VAULT_CREATE_NOTE_REQUIRED_FRONTMATTER = os.environ.get("VAULT_CREATE_NOTE_REQUI
 VAULT_CREATE_NOTE_ALLOWED_FRONTMATTER = _env_csv("VAULT_CREATE_NOTE_ALLOWED_FRONTMATTER")
 VAULT_CREATE_NOTE_ID_FIELD = os.environ.get("VAULT_CREATE_NOTE_ID_FIELD", "").strip()
 VAULT_CREATE_NOTE_REQUIRE_BODY_SECTION = os.environ.get("VAULT_CREATE_NOTE_REQUIRE_BODY_SECTION", "").strip()
-VAULT_CREATE_NOTE_MAX_BYTES = _env_int("VAULT_CREATE_NOTE_MAX_BYTES", 16000)
+VAULT_CREATE_NOTE_MAX_BYTES = _env_int("VAULT_CREATE_NOTE_MAX_BYTES", 0)
 
 
 def __getattr__(name: str):

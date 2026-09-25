@@ -18,15 +18,15 @@ from .semantic import SemanticExtension
 from .templates import TemplatesExtension
 
 
-def main() -> None:
-    # Default entry point loads all nine. Semantic fails soft without its [semantic] extra,
-    # PDF text without [pdf]; import stays inert until VAULT_IMPORT_URL_ENABLED /
-    # VAULT_IMPORT_FILE_ALLOWED_ROOTS, create-note until VAULT_CREATE_NOTE_PATH_PATTERN,
-    # OCR until VAULT_OCR_ENABLED.
-    # Order matters for the two content extractors: PdfTextExtension before OcrExtension,
-    # so a PDF with a text layer never reaches OCR.
-    # For a subset, write your own entry point and pass only the extensions you want.
-    serve([
+def default_extensions() -> list:
+    """All nine, in the order the default server loads them.
+
+    Semantic fails soft without its [semantic] extra, PDF text without [pdf]; import stays
+    inert until VAULT_IMPORT_URL_ENABLED / VAULT_IMPORT_FILE_ALLOWED_ROOTS, OCR until
+    VAULT_OCR_ENABLED. Order matters for the two content extractors: PdfTextExtension
+    before OcrExtension, so a PDF with a text layer never reaches OCR.
+    """
+    return [
         TemplatesExtension(),
         SemanticExtension(),
         RecurringExtension(),
@@ -36,7 +36,12 @@ def main() -> None:
         CreateNoteExtension(),
         PdfTextExtension(),
         OcrExtension(),
-    ])
+    ]
+
+
+def main() -> None:
+    # For a subset, write your own entry point and pass only the extensions you want.
+    serve(default_extensions())
 
 
 if __name__ == "__main__":

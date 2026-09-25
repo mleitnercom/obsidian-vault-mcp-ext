@@ -176,17 +176,8 @@ def test_created_note_stays_readable_through_the_hardlink_guard(vault):
 
 
 # --------------------------------------------------------------------------
-# Unconfigured means refused, not permissive
+# Unconfigured: see test_createnote_generic.py
 # --------------------------------------------------------------------------
-
-
-def test_refuses_when_no_path_pattern_is_configured(vault, monkeypatch):
-    monkeypatch.setattr(config, "VAULT_CREATE_NOTE_PATH_PATTERN", "")
-
-    result = _create()
-
-    assert result["error_code"] == "create_note_disabled"
-    assert not (vault / PATH).exists()
 
 
 def test_path_outside_the_pattern_is_refused(vault):

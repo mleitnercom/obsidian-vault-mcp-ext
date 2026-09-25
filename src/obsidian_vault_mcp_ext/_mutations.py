@@ -1,16 +1,19 @@
-"""Make extension writes visible the way the host's own writes are.
+"""Make extension tools visible in the host's audit log and to its write listeners.
 
-The host's mutation tools run through its private audit wrapper and fire a write event.
-Tools registered by an extension do neither on their own, so without this module a
-template apply, a recurring instance, an import or an encoding repair would change the
-vault while the audit log and every write listener (an index, a git committer, another
-extension) saw nothing. The host README promises one audit record per mutation; this is
-how the extensions keep that promise.
+The host (obsidian-web-mcp >= 0.4.0) audits an operation only when it knows the name:
+its built-ins, plus whatever an extension declares with ``register_audit_operation``
+(upstream #93). This module is the one place the extensions do that.
 
-Everything here uses only public host API: ``write_events.fire_write`` and the audit
-module's ``audit_enabled`` / ``snapshot_path`` / ``build_audit_record`` /
-``write_audit_record``. On a host older than those (before #56/#62) the calls are
-no-ops, so the extensions still run.
+- ``declare({name: kind})`` from each extension's ``register_tools``. ``kind`` is
+  ``"read"`` or ``"mutation"``, as for a built-in. The host refuses a name that collides
+  with a built-in, so a clash shows at startup rather than as a misleading log line.
+- ``audited(name, func)`` wraps a tool whose whole call is one operation: the read tools,
+  and ``vault_reindex``. It goes through the host's ``run_audited``, so a read is recorded
+  only with ``VAULT_AUDIT_LOG_INCLUDE_READS`` on, exactly like ``vault_read``.
+- ``mutation(name, path)`` records one write per file with before/after snapshots and
+  fires the host's write event. The tools that write several files (recurring
+  instances, an encoding repair across the vault) use it per file; one record per tool
+  call would hide which file changed.
 
 Usage::
 
@@ -22,25 +25,45 @@ A clean exit records success and fires "created" or "updated" (or ``m.event`` wh
 e.g. "deleted"). An exception records an error, fires nothing, and propagates.
 """
 
+import functools
 import logging
 from contextlib import contextmanager
 
+from obsidian_vault_mcp.audit import (
+    build_audit_record,
+    register_audit_operation,
+    run_audited,
+    should_audit_operation,
+    snapshot_path,
+    write_audit_record,
+)
+from obsidian_vault_mcp.write_events import fire_write
+
 logger = logging.getLogger(__name__)
 
-try:  # host >= #62
-    from obsidian_vault_mcp.write_events import fire_write as _fire_write
-except ImportError:  # pragma: no cover - older host
-    _fire_write = None
+# Arguments that name what a tool touches; passed to run_audited as record context.
+_CONTEXT_ARGS = ("path", "source", "paths", "folder", "path_prefix", "template_path", "target_path")
 
-try:  # host >= #56
-    from obsidian_vault_mcp.audit import (
-        audit_enabled as _audit_enabled,
-        build_audit_record as _build_audit_record,
-        snapshot_path as _snapshot_path,
-        write_audit_record as _write_audit_record,
-    )
-except ImportError:  # pragma: no cover - older host
-    _audit_enabled = None
+
+def declare(operations: dict[str, str]) -> None:
+    """Register each extension operation with the host's audit log."""
+    for name, kind in operations.items():
+        register_audit_operation(name, kind)
+
+
+def audited(operation: str, func):
+    """Wrap a tool so its whole call is one audited operation.
+
+    ``functools.wraps`` keeps the signature visible, so the tool's MCP schema is built
+    from ``func`` exactly as before.
+    """
+
+    @functools.wraps(func)
+    def tool(*args, **kwargs):
+        context = {key: kwargs[key] for key in _CONTEXT_ARGS if key in kwargs}
+        return run_audited(operation, lambda: func(*args, **kwargs), **context)
+
+    return tool
 
 
 class _Mutation:
@@ -48,10 +71,6 @@ class _Mutation:
         self.created: bool | None = None
         self.event: str | None = None
         self.paths: list[str] | None = None
-
-
-def _auditing() -> bool:
-    return bool(_audit_enabled and _audit_enabled())
 
 
 @contextmanager
@@ -62,16 +81,18 @@ def mutation(operation: str, path: str, *, announce: bool = True):
     tool implementation which fires its own write event (the compat tools wrap
     ``vault_edit``); announcing it again would tell every listener twice.
     """
-    auditing = _auditing()
+    # The host decides: a declared mutation is audited whenever the log is on. An
+    # undeclared name is not, the same rule the host applies to everything.
+    auditing = should_audit_operation(operation)
     # Only hashed when a record will be written: snapshot_path reads the whole file.
-    before = _snapshot_path(path) if auditing else None
+    before = snapshot_path(path) if auditing else None
     state = _Mutation()
     try:
         yield state
     except Exception as exc:
         if auditing:
-            _write_audit_record(
-                _build_audit_record(
+            write_audit_record(
+                build_audit_record(
                     operation=operation,
                     target_path=path,
                     before=before,
@@ -82,9 +103,9 @@ def mutation(operation: str, path: str, *, announce: bool = True):
         raise
     event = state.event or ("created" if state.created else "updated")
     if auditing:
-        after = None if event == "deleted" else _snapshot_path(path)
-        _write_audit_record(
-            _build_audit_record(
+        after = None if event == "deleted" else snapshot_path(path)
+        write_audit_record(
+            build_audit_record(
                 operation=operation,
                 target_path=path,
                 before=before,
@@ -92,5 +113,5 @@ def mutation(operation: str, path: str, *, announce: bool = True):
                 operation_status="success",
             )
         )
-    if announce and _fire_write is not None:
-        _fire_write(event, state.paths or [path])
+    if announce:
+        fire_write(event, state.paths or [path])

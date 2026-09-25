@@ -2,6 +2,8 @@
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import audited, declare
+
 from . import tools
 
 _RO = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
@@ -17,11 +19,17 @@ class TemplatesExtension(Extension):
     """
 
     def register_tools(self, mcp) -> None:
+        declare({
+            "vault_template_list": "read",
+            "vault_template_render": "read",
+            "vault_template_apply": "mutation",
+            "vault_dataview_query": "read",
+        })
         mcp.tool(
             name="vault_template_list",
             description="List markdown templates under VAULT_TEMPLATER_FOLDER.",
             annotations=_RO,
-        )(tools.vault_template_list)
+        )(audited("vault_template_list", tools.vault_template_list))
         mcp.tool(
             name="vault_template_render",
             description=(
@@ -29,7 +37,7 @@ class TemplatesExtension(Extension):
                 "returns the rendered content without writing."
             ),
             annotations=_RO,
-        )(tools.vault_template_render)
+        )(audited("vault_template_render", tools.vault_template_render))
         mcp.tool(
             name="vault_template_apply",
             description=(
@@ -45,4 +53,4 @@ class TemplatesExtension(Extension):
                 "VAULT_OBSIDIAN_REST_URL; returns a capability error when unset (fail-soft)."
             ),
             annotations=_RO,
-        )(tools.vault_dataview_query)
+        )(audited("vault_dataview_query", tools.vault_dataview_query))

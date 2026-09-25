@@ -12,6 +12,8 @@ import threading
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import declare
+
 from . import _config as config
 from . import tools
 
@@ -33,6 +35,9 @@ class RecurringExtension(Extension):
         self._thread: threading.Thread | None = None
 
     def register_tools(self, mcp) -> None:
+        declare({
+            "recurring_materialize": "mutation",
+        })
         mcp.tool(
             name="recurring_materialize",
             description=(

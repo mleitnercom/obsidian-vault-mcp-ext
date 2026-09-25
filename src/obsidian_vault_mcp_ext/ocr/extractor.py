@@ -17,6 +17,7 @@ business seeing them.
 
 import logging
 import os
+import re
 import shlex
 import subprocess
 import threading
@@ -42,8 +43,10 @@ _ENV_PASSTHROUGH = (
 def child_env(path: Path) -> dict:
     """The OCR command's whole environment. Built here, never inherited."""
     env = {name: os.environ[name] for name in _ENV_PASSTHROUGH if name in os.environ}
-    # Tuning for OCR wrappers (pages, DPI, languages). None of these is a secret.
-    env.update({k: v for k, v in os.environ.items() if k.startswith("VAULT_") and "OCR" in k})
+    # Tuning for OCR wrappers (pages, DPI, languages). None of these is a secret. The page
+    # list is set per call only: inherited, it would turn a whole-document run partial.
+    env.update({k: v for k, v in os.environ.items()
+                if k.startswith("VAULT_") and "OCR" in k and k != "VAULT_PDF_OCR_PAGES"})
     # The fork's PDF wrapper also reads the file from here.
     env["VAULT_PDF_PATH"] = str(path)
     return env
@@ -150,6 +153,130 @@ def extract(relative_path: str, path: Path) -> str | None:
     if text is None:
         return None
     _remember(key, text)
+    return text
+
+
+_PAGE_BLOCK = re.compile(r"PAGE (\d+)( FAILED)?\n?(.*)", re.DOTALL)
+
+
+def merge_labelled(per_page: list[str], pages: list[int], raw: str) -> tuple[str, list[int], list[int]] | None:
+    """Put OCR text into the pages that had none, by label, never by position.
+
+    Same contract as the fork (v0.15.1): a form feed and ``PAGE <n>`` per page handled,
+    then its text; no text means blank; ``PAGE <n> FAILED`` means unreadable; a requested
+    page without a label was capped. Text before the first label, an unlabelled block, a
+    page not requested, one labelled twice, or no label at all rejects the output: a
+    command that ignores the page list prints the whole document as one stream, and
+    matching that by position would put a cover sheet's text on page 2.
+
+    Returns (merged text, pages that got text, pages that failed).
+    """
+    head, *blocks = raw.split("\f")
+    if head.strip() or not blocks:
+        return None
+    wanted = set(pages)
+    texts = list(per_page)
+    seen: set[int] = set()
+    done: list[int] = []
+    failed: list[int] = []
+    for block in blocks:
+        match = _PAGE_BLOCK.fullmatch(block)
+        if match is None:
+            return None
+        number = int(match.group(1))
+        if number not in wanted or number in seen:
+            return None
+        seen.add(number)
+        if match.group(2):
+            failed.append(number)
+            continue
+        text = match.group(3).strip()
+        if text:
+            texts[number - 1] = text
+            done.append(number)
+    return "\n\n".join(t for t in texts if t), sorted(done), sorted(failed)
+
+
+def _run_pages(argv: list[str], path: Path, relative_path: str, pages: list[int]) -> str | None:
+    env = child_env(path)
+    env["VAULT_PDF_OCR_PAGES"] = ",".join(str(p) for p in pages)
+    try:
+        completed = subprocess.run(argv, capture_output=True, timeout=config.OCR_TIMEOUT_SECONDS, check=False, env=env)
+    except subprocess.TimeoutExpired:
+        logger.warning("Partial OCR timed out after %ss for %s", config.OCR_TIMEOUT_SECONDS, relative_path)
+        return None
+    except OSError as exc:
+        logger.warning("Partial OCR could not start for %s: %s", relative_path, exc)
+        return None
+    if completed.returncode != 0:
+        logger.warning("Partial OCR failed for %s (exit %s)", relative_path, completed.returncode)
+        return None
+    # Not stripped: the labels start with a form feed, which strip() would eat.
+    return completed.stdout.decode("utf-8", errors="replace")
+
+
+def extract_partial(relative_path: str, path: Path, per_page: list[str]) -> str | None:
+    """OCR the pages of a mixed PDF that have no text; None leaves the text layer alone.
+
+    Called by PdfTextExtension. A failed run, output that breaks the labels, or partial OCR
+    being off all return None, and the caller serves the text layer as before.
+    """
+    if not (config.OCR_ENABLED and config.OCR_PDF_PARTIAL and config.OCR_PDF_CMD):
+        return None
+    pages = [n for n, text in enumerate(per_page, start=1) if not text]
+    if not pages or len(pages) == len(per_page):
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    if stat.st_size > config.OCR_MAX_FILE_BYTES:
+        return None
+
+    key = ("partial", str(path), stat.st_size, stat.st_mtime_ns)
+    if config.OCR_CACHE_ENTRIES > 0:
+        with _cache_lock:
+            if key in _cache:
+                _cache.move_to_end(key)
+                return _cache[key]
+
+    def run() -> tuple[str, bool] | None:
+        raw = _run_pages(build_argv(config.OCR_PDF_CMD, path), path, relative_path, pages)
+        if raw is None:
+            return None
+        merged = merge_labelled(per_page, pages, raw)
+        if merged is None:
+            logger.warning("Partial OCR output for %s does not follow the page labels; ignored", relative_path)
+            return None
+        text, _done, failed = merged
+        # A failed page is not a blank one: answer, but do not cache, so the next read retries.
+        return text, not failed
+
+    if config.OCR_SIDECAR_ENABLED:
+        cached = sidecar.read_valid(path)
+        if cached is not None:
+            _remember(key, cached)
+            return cached
+        with sidecar.Lock(path, config.OCR_TIMEOUT_SECONDS * 2):
+            cached = sidecar.read_valid(path)
+            if cached is not None:
+                _remember(key, cached)
+                return cached
+            result = run()
+            if result is None:
+                return None
+            text, cacheable = result
+            if cacheable:
+                _store_sidecar(relative_path, path, text)
+                _remember(key, text)
+            return text
+
+    result = run()
+    if result is None:
+        return None
+    text, cacheable = result
+    if cacheable:
+        _remember(key, text)
     return text
 
 

@@ -35,6 +35,12 @@ OCR_IMAGE_CMD = os.environ.get("VAULT_OCR_IMAGE_CMD", "tesseract {path} - -l eng
 # PDFs: tesseract cannot read a PDF, so this needs a command that renders pages first
 # (e.g. pdftoppm piped into tesseract, or ocrmypdf --sidecar). Empty disables PDF OCR.
 OCR_PDF_CMD = os.environ.get("VAULT_OCR_PDF_CMD", "").strip()
+# Mixed PDFs: a scan with a few text pages (an e-signature trail, a typed cover sheet).
+# With this on, PdfTextExtension asks for OCR of just the pages without text, listed in
+# VAULT_PDF_OCR_PAGES; the command labels each page it handles with a form feed and
+# "PAGE <n>" (or "PAGE <n> FAILED"). The production wrapper in the fork's docs/deploy
+# does this. Off by default: it needs such a command, and it costs OCR time.
+OCR_PDF_PARTIAL = _env_bool("VAULT_OCR_PDF_PARTIAL", False)
 
 OCR_TIMEOUT_SECONDS = _env_int("VAULT_OCR_TIMEOUT", 120)
 OCR_MAX_FILE_BYTES = _env_int("VAULT_OCR_MAX_FILE_BYTES", 50 * 1024 * 1024)

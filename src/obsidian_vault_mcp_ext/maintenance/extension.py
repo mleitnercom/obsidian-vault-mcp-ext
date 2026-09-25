@@ -2,6 +2,8 @@
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import audited, declare
+
 from . import tools
 
 _RO = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
@@ -18,6 +20,11 @@ class MaintenanceExtension(Extension):
     """
 
     def register_tools(self, mcp) -> None:
+        declare({
+            "vault_scan_encoding": "read",
+            "vault_repair_encoding": "mutation",
+            "vault_delete_directory": "mutation",
+        })
         mcp.tool(
             name="vault_scan_encoding",
             description=(
@@ -25,7 +32,7 @@ class MaintenanceExtension(Extension):
                 "that are not valid UTF-8, with the byte position and reason. Read-only."
             ),
             annotations=_RO,
-        )(tools.vault_scan_encoding)
+        )(audited("vault_scan_encoding", tools.vault_scan_encoding))
         mcp.tool(
             name="vault_repair_encoding",
             description=(

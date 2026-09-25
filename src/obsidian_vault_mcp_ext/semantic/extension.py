@@ -11,6 +11,8 @@ from pathlib import Path
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import audited, declare
+
 from . import tools
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,10 @@ class SemanticExtension(Extension):
         return self._engine
 
     def register_tools(self, mcp) -> None:
+        declare({
+            "vault_semantic_search": "read",
+            "vault_reindex": "mutation",
+        })
         # Build the engine eagerly enough to inject it into the tools module, but the
         # constructor itself imports no heavy deps (those load lazily on search/reindex).
         self._get_engine()
@@ -53,7 +59,7 @@ class SemanticExtension(Extension):
                 "payload (fail-soft) when dependencies or the index are absent."
             ),
             annotations=_RO,
-        )(tools.vault_semantic_search)
+        )(audited("vault_semantic_search", tools.vault_semantic_search))
         mcp.tool(
             name="vault_reindex",
             description=(
@@ -62,7 +68,7 @@ class SemanticExtension(Extension):
                 "the [semantic] extra; returns an error payload when it is unavailable."
             ),
             annotations=_REINDEX,
-        )(tools.vault_reindex)
+        )(audited("vault_reindex", tools.vault_reindex))
 
     def after_indexes_start(self, frontmatter_index) -> None:
         """Attach an incremental reindex listener when the host exposes one.

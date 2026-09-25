@@ -23,8 +23,8 @@ yet, so install both from git — **the host first** (its dependency must alread
 pip resolves this package):
 
 ```bash
-# 1. Host server (must include the extension seam, i.e. recent main):
-pip install "obsidian-web-mcp @ git+https://github.com/jimprosser/obsidian-web-mcp@main"
+# 1. Host server, v0.4.0 or later (the public audit API for extensions, #93):
+pip install "obsidian-web-mcp @ git+https://github.com/jimprosser/obsidian-web-mcp@v0.4.0"
 
 # 2. This package — base (Templates + Recurring + Import + Maintenance, no heavy deps):
 pip install "obsidian-vault-mcp-ext @ git+https://github.com/mleitnercom/obsidian-vault-mcp-ext@main"
@@ -34,7 +34,8 @@ pip install "obsidian-vault-mcp-ext[semantic] @ git+https://github.com/mleitnerc
 ```
 
 Python 3.12+. The `[semantic]` extra needs a Python with faiss/numpy<2 wheels (3.12 or 3.13).
-Verified on Python 3.12 (host `0.2.0`).
+Requires host `0.4.0` or later. Verified on Python 3.12 against host `0.4.0`, with and
+without the `[semantic]` extra.
 
 ## Running
 
@@ -112,7 +113,9 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   format, so it survives a restart and fork-era sidecars are reused without re-running
   OCR. The OCR command runs with a scrubbed environment: no server token or secrets.
   Note: the host's `vault_search` looks at `*.md` by default, so sidecar text is found
-  with `file_pattern="*.ocr.txt"` or `"*"`.
+  with `file_pattern="*.ocr.txt"` or `"*"` (a seam for this is proposed upstream, #96).
+  With `VAULT_OCR_PDF_PARTIAL` on, a mixed PDF (a scan with an e-signature trail, say)
+  gets its pages without text OCR'd and merged in by page label; see the OCR table.
 
 - **PdfTextExtension** - the text layer of a PDF through `vault_read`, with pypdf (optional
   `[pdf]` extra). The host reads no PDF on its own. Declines scans (so OCR gets them next),
@@ -124,20 +127,27 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   `vault_edit`, so every upstream protection applies) and `vault_tree`. Same result fields
   as the fork.
 
-- **CreateNoteExtension** - `vault_create_note`, a write path that can never replace an
-  existing file, for automated clients. The same `VAULT_CREATE_NOTE_*` policy variables as
-  the fork; inert until `VAULT_CREATE_NOTE_PATH_PATTERN` is set.
+- **CreateNoteExtension** - `vault_create_note`: add a Markdown note, never replace one,
+  also under concurrent calls. Works unconfigured, as in the fork since v0.15.0; the
+  `VAULT_CREATE_NOTE_*` variables optionally narrow it.
 
 ### Audit and write events
 
-Every write an extension makes is reported the way the host reports its own: one audit
-record when the host's `VAULT_AUDIT_LOG_PATH` is set, and a write event (`created`,
-`updated` or `deleted`) for every listener registered with `register_write_listener`.
-That covers template apply, recurring instances with their alert and report notes, URL and
-file import, encoding repair, directory soft-delete, the compat edit tools, created notes
-and OCR sidecars. The operation name in the audit
-record is the tool's name. Uses only public host API; on a host older than the audit log
-(#56) and the write-listener seam (#62) it does nothing.
+Every extension tool is declared to the host's audit log with
+`register_audit_operation` (host 0.4.0, #93), as a `read` or a `mutation` according to its
+`readOnlyHint`, so the host applies its own rules:
+
+- Writes get one record per file with before/after size and checksum whenever
+  `VAULT_AUDIT_LOG_PATH` is set, plus a write event (`created`, `updated` or `deleted`) for
+  every listener registered with `register_write_listener`. That covers template apply,
+  recurring instances with their alert and report notes, URL and file import, encoding
+  repair, directory soft-delete, the compat edit tools, created notes and OCR sidecars
+  (operation `ocr_sidecar`).
+- Read tools (`vault_tree`, `vault_scan_encoding`, `vault_semantic_search`, the template
+  and Dataview reads) go through the host's `run_audited` and are recorded only with
+  `VAULT_AUDIT_LOG_INCLUDE_READS` on, exactly like `vault_read`.
+
+The operation name in the audit record is the tool's name. Uses only public host API.
 
 ### Hardlinks
 
@@ -218,7 +228,8 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_OCR_ENABLED` | `false` | Master switch; nothing is registered until set. |
 | `VAULT_OCR_IMAGE_EXTENSIONS` | `.png,.jpg,.jpeg,.webp,.tif,.tiff` | Suffixes sent to the image command. |
 | `VAULT_OCR_IMAGE_CMD` | `tesseract {path} - -l eng` | Image OCR command; must print text to stdout. |
-| `VAULT_OCR_PDF_CMD` | _(empty)_ | PDF OCR command (renders pages first, e.g. a pdftoppm + tesseract wrapper). Empty disables PDFs. |
+| `VAULT_OCR_PDF_CMD` | _(empty)_ | PDF OCR command (renders pages first, e.g. the pdftoppm + tesseract wrapper in [docs/deploy/pdf-ocr-wrapper.sh](docs/deploy/pdf-ocr-wrapper.sh)). Empty disables PDFs. |
+| `VAULT_OCR_PDF_PARTIAL` | `false` | Mixed PDFs: OCR only the pages without a text layer, named in `VAULT_PDF_OCR_PAGES`. The command labels each page with a form feed and `PAGE <n>` (or `PAGE <n> FAILED`); output that breaks the labels is ignored and the text layer served. The wrapper above does this. |
 | `VAULT_OCR_TIMEOUT` | `120` | Seconds before a command is killed and the read declines. |
 | `VAULT_OCR_MAX_FILE_BYTES` | `52428800` | Larger files are not OCR'd. |
 | `VAULT_OCR_CACHE_ENTRIES` | `256` | In-memory results keyed by path, size and mtime; `0` disables. |
@@ -229,12 +240,12 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `VAULT_CREATE_NOTE_PATH_PATTERN` | _(empty)_ | Regex the vault-relative path must fully match. Empty disables the tool. |
+| `VAULT_CREATE_NOTE_PATH_PATTERN` | _(empty)_ | Regex the vault-relative path must fully match. Empty: any `.md` path. |
 | `VAULT_CREATE_NOTE_REQUIRED_FRONTMATTER` | _(empty)_ | JSON `{field: regex or true}`. |
 | `VAULT_CREATE_NOTE_ALLOWED_FRONTMATTER` | _(empty)_ | Comma-separated field allowlist; empty allows any. |
 | `VAULT_CREATE_NOTE_ID_FIELD` | _(empty)_ | Field whose value must equal the filename stem. |
 | `VAULT_CREATE_NOTE_REQUIRE_BODY_SECTION` | _(empty)_ | Literal text the body must contain. |
-| `VAULT_CREATE_NOTE_MAX_BYTES` | `16000` | Per-note size limit. |
+| `VAULT_CREATE_NOTE_MAX_BYTES` | `0` | Per-note size limit; `0` means the host's `MAX_CONTENT_SIZE`. |
 
 ### Maintenance
 

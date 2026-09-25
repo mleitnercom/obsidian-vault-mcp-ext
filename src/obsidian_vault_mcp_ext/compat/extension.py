@@ -2,6 +2,8 @@
 
 from obsidian_vault_mcp.extensions import Extension
 
+from .._mutations import audited, declare
+
 from . import tools
 
 _RO = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
@@ -14,6 +16,12 @@ class CompatExtension(Extension):
     they carry every protection upstream applies to an edit; see compat/tools.py."""
 
     def register_tools(self, mcp) -> None:
+        declare({
+            "vault_str_replace": "mutation",
+            "vault_patch": "mutation",
+            "vault_batch_replace": "mutation",
+            "vault_tree": "read",
+        })
         mcp.tool(
             name="vault_str_replace",
             description=(
@@ -42,4 +50,4 @@ class CompatExtension(Extension):
             name="vault_tree",
             description="Return a nested JSON tree of the vault directory structure, up to depth 5.",
             annotations=_RO,
-        )(tools.vault_tree)
+        )(audited("vault_tree", tools.vault_tree))
