@@ -72,6 +72,7 @@ All read at import time from the `VAULT_SEMANTIC_*` namespace.
 | `VAULT_SEMANTIC_CHUNK_SIZE` | int | `900` | Target characters per chunk. |
 | `VAULT_SEMANTIC_CHUNK_OVERLAP` | int | `150` | Character overlap between adjacent chunks. |
 | `VAULT_SEMANTIC_EMBED_BATCH_SIZE` | int | `64` | Chunks embedded per batch during index build. |
+| `VAULT_SEMANTIC_EMBED_PARALLEL` | int | `0` | fastembed only: worker processes (one thread each) for embedding during a reindex; `0` or `1` is off. Each worker loads its own model copy. Set it for the reindex job, not the server. |
 | `VAULT_SEMANTIC_MAX_RESULTS` | int | `20` | Hard cap on results; a tool call's `max_results` is clamped to this. |
 | `VAULT_SEMANTIC_UPDATE_DEBOUNCE_SECONDS` | int | `4` | Debounce window for incremental updates fed by the host change listener. |
 | `VAULT_SEMANTIC_CACHE_PATH` | string | _(derived)_ | Explicit cache directory. When empty, the cache lives at `<VAULT_PATH>/.obsidian-vault-mcp`. |

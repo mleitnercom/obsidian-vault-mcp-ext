@@ -194,6 +194,7 @@ Booleans accept `1/true/yes/on`. `VAULT_PATH` comes from the host server config.
 | `VAULT_SEMANTIC_CHUNK_SIZE` | `900` | Target characters per chunk. |
 | `VAULT_SEMANTIC_CHUNK_OVERLAP` | `150` | Character overlap between chunks. |
 | `VAULT_SEMANTIC_EMBED_BATCH_SIZE` | `64` | Chunks embedded per batch. |
+| `VAULT_SEMANTIC_EMBED_PARALLEL` | `0` | fastembed only: worker processes (one thread each) for embedding during a reindex; `0` or `1` is off. Each worker loads its own model copy. Set it for the reindex job, not the server. |
 | `VAULT_SEMANTIC_MAX_RESULTS` | `20` | Hard cap on results (clamps a call's `max_results`). |
 | `VAULT_SEMANTIC_UPDATE_DEBOUNCE_SECONDS` | `4` | Debounce for change-listener incremental updates. |
 | `VAULT_SEMANTIC_CACHE_PATH` | `<VAULT_PATH>/.obsidian-vault-mcp` | Explicit cache directory override. |
