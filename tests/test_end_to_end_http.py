@@ -9,7 +9,9 @@ read from the environment, and that a PDF with a text layer is readable through 
 vault_read.
 
 The child's environment is built from scratch, never inherited, so a developer's own
-settings cannot reach into the test.
+settings cannot reach into the test. Its PYTHONPATH points at the directories the test
+process imports both packages from, so the server runs the code under test and not an
+installed copy.
 """
 
 import asyncio
@@ -22,6 +24,7 @@ import sys
 import time
 import urllib.request
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
@@ -37,14 +40,49 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def _code_under_test() -> str:
+    """PYTHONPATH for the child: the directories this test process imports both packages from.
+
+    Without it the child imports whatever is installed in the interpreter's site-packages,
+    which on a test host can be another checkout of either package (seen 2026-10-07: the
+    server ran an installed host without the seam under test, while the test process used
+    the branch).
+    """
+    import obsidian_vault_mcp
+    import obsidian_vault_mcp_ext
+
+    roots = [str(Path(module.__file__).resolve().parents[1]) for module in (obsidian_vault_mcp_ext, obsidian_vault_mcp)]
+    return os.pathsep.join(dict.fromkeys(roots))
+
+
+def child_env(home, extra_env) -> dict:
+    env = {name: os.environ[name] for name in _PASSTHROUGH if name in os.environ}
+    env.update({"HOME": str(home), "USERPROFILE": str(home), "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": _code_under_test(), **extra_env})
+    return env
+
+
+def test_the_server_process_imports_the_code_under_test(tmp_path):
+    import obsidian_vault_mcp
+    import obsidian_vault_mcp_ext
+
+    out = subprocess.run(
+        [sys.executable, "-c", "import obsidian_vault_mcp, obsidian_vault_mcp_ext; "
+                               "print(obsidian_vault_mcp.__file__); print(obsidian_vault_mcp_ext.__file__)"],
+        env=child_env(tmp_path, {}), capture_output=True, text=True, timeout=60, check=True,
+    ).stdout.split()
+
+    assert [str(Path(p).resolve()) for p in out] == [
+        str(Path(obsidian_vault_mcp.__file__).resolve()), str(Path(obsidian_vault_mcp_ext.__file__).resolve())]
+
+
 @contextmanager
 def live_package(tmp_path, vault, extra_env):
     port = _free_port()
     home = tmp_path / "home"
     home.mkdir()
-    env = {name: os.environ[name] for name in _PASSTHROUGH if name in os.environ}
+    env = child_env(home, {})
     env.update({
-        "HOME": str(home), "USERPROFILE": str(home), "PYTHONUNBUFFERED": "1",
         "VAULT_PATH": str(vault), "VAULT_MCP_TOKEN": TOKEN, "VAULT_MCP_HOST": "127.0.0.1",
         "VAULT_MCP_PORT": str(port), "VAULT_MCP_PATH": "/", "VAULT_MCP_PUBLIC_URL": f"http://127.0.0.1:{port}",
         **extra_env,
