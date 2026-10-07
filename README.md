@@ -25,6 +25,8 @@ pip resolves this package):
 ```bash
 # 1. Host server, v0.4.0 or later (the public audit API for extensions, #93):
 pip install "obsidian-web-mcp @ git+https://github.com/jimprosser/obsidian-web-mcp@v0.4.0"
+#    Sidecar search (#96) and binary types decided by extension (#95) are on main since
+#    2026-10-07 but in no release yet; for them install the host from a main commit instead.
 
 # 2. This package — base (Templates + Recurring + Import + Maintenance, no heavy deps):
 pip install "obsidian-vault-mcp-ext @ git+https://github.com/mleitnercom/obsidian-vault-mcp-ext@main"
@@ -112,8 +114,10 @@ verified on Python 3.12 with the `[semantic]` extra installed).
   OCR text is also persisted next to its source as `<file>.ocr.txt`, in the fork's exact
   format, so it survives a restart and fork-era sidecars are reused without re-running
   OCR. The OCR command runs with a scrubbed environment: no server token or secrets.
-  Note: the host's `vault_search` looks at `*.md` by default, so sidecar text is found
-  with `file_pattern="*.ocr.txt"` or `"*"` (a seam for this is proposed upstream, #96).
+  With OCR and sidecars on, the extension registers `*.ocr.txt` with the host's
+  `register_search_pattern` (jimprosser#96, on upstream main since 2026-10-07, not yet in a
+  release), so a plain `vault_search` finds sidecar text; name matches stay on notes. On a
+  host without that seam it logs once, and sidecars are found with `file_pattern="*.ocr.txt"`.
   With `VAULT_OCR_PDF_PARTIAL` on, a mixed PDF (a scan with an e-signature trail, say)
   gets its pages without text OCR'd and merged in by page label; see the OCR table.
 
