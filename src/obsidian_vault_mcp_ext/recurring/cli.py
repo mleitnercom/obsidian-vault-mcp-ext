@@ -47,3 +47,7 @@ def cli_main(argv: list[str] | None = None) -> int:
 
 def main() -> None:  # console-script entry point
     raise SystemExit(cli_main())
+
+
+if __name__ == "__main__":  # python -m ... must run, not import and exit 0
+    main()
