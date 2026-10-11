@@ -7,10 +7,15 @@ as is, the fork's file loads as an empty registry, and every connector that late
 re-authorises replays a client_id the host does not know: "Unknown client", remove and
 re-add the connector.
 
-Why it works: the host checks a dynamic client's secret nowhere in the authorization
-code flow; what it matches is client_id, redirect_uri and PKCE. So a record with the
-same client_id and redirect URIs and a fresh random secret keeps the connector working.
-The fresh secret is never handed to anyone; it only satisfies the loader.
+What carries over, and what does not: the host imports the registry into its own OAuth
+store on start and matches client_id, redirect_uri and PKCE. A client that sends no
+secret (``token_endpoint_auth_method: none``, e.g. ChatGPT) re-authorises as before. A
+client that sends one is checked against the stored secret since per-client OAuth
+(upstream #108), and the fork kept only a hash of the original. The record therefore
+gets a fresh random secret the client does not know, and its next token request fails
+with ``invalid_client``: that connector has to be removed and added once. The tool
+lists such clients under ``reconnect_required``, counting every method other than
+``none``, since each of them authenticates with a secret the host does not have.
 
 What it refuses: a client registered for the client-credentials grant (the host only
 accepts its configured VAULT_OAUTH_CLIENT_ID for that), a record without redirect URIs,
@@ -20,8 +25,8 @@ Usage::
 
     python -m obsidian_vault_mcp_ext.migrate_oauth_clients FORK_STORE HOST_STORE
 
-The bearer token itself is VAULT_MCP_TOKEN on both sides; keep it unchanged and
-already-connected clients keep working without re-authorising at all.
+The host still accepts the static VAULT_MCP_TOKEN as a bearer; keep it unchanged and a
+connected client keeps working until it re-authorises or refreshes its token.
 """
 
 import json
@@ -55,6 +60,18 @@ def convert(fork_store: dict) -> tuple[dict, dict]:
     return converted, skipped
 
 
+def reconnect_required(fork_store: dict, registry: dict) -> list[str]:
+    """The migrated clients that authenticate with a secret, so must reconnect once.
+
+    A record without the field counts as ``client_secret_basic``, the RFC 7591 default.
+    """
+    clients = fork_store.get("clients", fork_store) if isinstance(fork_store, dict) else {}
+    return sorted(
+        client_id for client_id in registry
+        if clients[client_id].get("token_endpoint_auth_method", "client_secret_basic") != "none"
+    )
+
+
 def write_registry(path: Path, registry: dict) -> None:
     """Write the host registry 0600, refusing to replace an existing file."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,13 +86,15 @@ def main(argv: list[str] | None = None) -> int:
         print("usage: python -m obsidian_vault_mcp_ext.migrate_oauth_clients FORK_STORE HOST_STORE", file=sys.stderr)
         return 2
     source, target = Path(args[0]), Path(args[1])
-    registry, skipped = convert(json.loads(source.read_text(encoding="utf-8")))
+    fork_store = json.loads(source.read_text(encoding="utf-8"))
+    registry, skipped = convert(fork_store)
     try:
         write_registry(target, registry)
     except FileExistsError:
         print(f"{target} exists; not replaced", file=sys.stderr)
         return 1
-    print(json.dumps({"migrated": sorted(registry), "skipped": skipped}, indent=2))
+    print(json.dumps({"migrated": sorted(registry), "skipped": skipped,
+                      "reconnect_required": reconnect_required(fork_store, registry)}, indent=2))
     return 0
 
 
