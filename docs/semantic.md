@@ -140,9 +140,13 @@ Scoring:
 
 - **semantic** — cosine/inner-product similarity from the FAISS index over
   normalized embeddings.
-- **keyword** — BM25 over whitespace-tokenized query terms, normalized to the
-  top score in the result set.
-- **hybrid** (default) — `0.75 * semantic + 0.25 * keyword`.
+- **keyword** — BM25 over the query's words, tokenized exactly like the notes
+  (runs of letters, digits and underscores in any script, lowercased), normalized to
+  the top score in the vault.
+- **hybrid** (default) — `0.75 * semantic + 0.25 * keyword`, over the top 200
+  candidates of each signal. A keyword candidate outside the semantic top 200 gets its
+  real similarity, so a chunk's score depends only on the chunk and the query, and
+  asking for more results extends the list without reordering it.
 
 Each result returns `path`, `title`, `section`, `tags`, the combined `score` plus
 the component `semantic_score` / `keyword_score`, and a 280-char `excerpt`. The
